@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:latest
+    container_name: testify-postgres
+    environment:
+      POSTGRES_USER: ${DATABASE_USERNAME}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD}
+      POSTGRES_DB: ${DATABASE_NAME}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+
+  redis:
+    image: redis:alpine
+    container_name: testify-redis
+    ports:
+      - '${REDIS_PORT}:6379'
+    restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+
+  # influxdb:
+  #   image: influxdb:1.8
+  #   container_name: testify-influxdb
+  #   ports:
+  #     - '8086:8086'
+  #   volumes:
+  #     - influxdb_data:/var/lib/influxdb
+  #   environment:
+  #     - INFLUXDB_DB=${INFLUXDB_DB}
+  #   restart: always
+
+  # grafana:
+  #   image: grafana/grafana
+  #   container_name: testify-grafana
+  #   ports:
+  #     - '3000:3000'
+  #   volumes:
+  #     - grafana_data:/var/lib/grafana
+  #   environment:
+  #     - GF_SECURITY_ADMIN_USER=admin
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #   depends_on:
+  #     - influxdb
+  #   restart: always
+
+volumes:
+  postgres_data:
+  influxdb_data:
+  grafana_data:
