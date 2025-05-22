@@ -1,0 +1,23 @@
+model RunHistory {
+    id                String           @id @default(cuid())
+    scenarioId        String
+    scenario          Scenario         @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+    runAt             DateTime
+    vus               Int
+    duration          Int
+    successRate       Float
+    avgResponseTime   Float
+    errorRate         Float
+    requestsPerSecond Float
+    status            RunHistoryStatus @default(SUCCESS)
+    rawResultUrl      String?
+    createdAt         DateTime         @default(now())
+    updatedAt         DateTime         @updatedAt
+}
+
+enum RunHistoryStatus {
+    RUNNING
+    SUCCESS
+    FAILED
+    ABORTED
+}

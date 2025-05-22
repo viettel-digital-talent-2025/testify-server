@@ -1,0 +1,31 @@
+model ScenarioFlow {
+    id          String   @id @default(cuid())
+    scenarioId  String
+    scenario    Scenario @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+    name        String
+    description String?
+    weight      Int
+    order       Int
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+
+    steps ScenarioFlowStep[]
+}
+
+model ScenarioFlowStep {
+    id          String               @id @default(cuid())
+    flowId      String
+    flow        ScenarioFlow         @relation(fields: [flowId], references: [id], onDelete: Cascade)
+    name        String
+    description String?
+    type        ScenarioFlowStepType
+    config      Json
+    order       Int
+}
+
+enum ScenarioFlowStepType {
+    API
+    SQL
+    BROWSER
+    WAIT
+}

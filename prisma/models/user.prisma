@@ -1,0 +1,17 @@
+model User {
+  id             String          @id @default(cuid())
+  firstname      String
+  lastname       String
+  email          String          @unique
+  password       String
+  role           Role            @default(User)
+  scenarios      Scenario[]
+  scenarioGroups ScenarioGroup[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+enum Role {
+  User
+  Admin
+}
