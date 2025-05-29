@@ -45,10 +45,14 @@ export class UserRepository {
   }
 
   async existByEmail(email: string) {
-    const user = await this.prismaService.user.findUnique({
-      where: { email },
-    });
-    return user !== null;
+    try {
+      const user = await this.prismaService.user.findUnique({
+        where: { email },
+      });
+      return user !== null;
+    } catch {
+      return null;
+    }
   }
 
   async getByEmail(email: string) {
