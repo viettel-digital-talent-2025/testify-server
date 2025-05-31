@@ -1,35 +1,27 @@
+import { Roles } from '@/auth/decorators/roles.decorator';
+import { RolesGuard } from '@/auth/guards/roles.guard';
+import { TokenGuard } from '@/auth/guards/token.guard';
+import { CreateScenarioGroupDto } from '@/scenario/dtos/scenario-group.dto';
+import { ScenarioGroupService } from '@/scenario/services/scenario-group.service';
+import { RequestWithUser } from '@/shared/types/request.types';
 import {
-  Controller,
-  Post,
   Body,
-  UseGuards,
-  Request,
+  Controller,
+  Delete,
   Get,
   Param,
   Patch,
-  Delete,
+  Post,
+  Request,
+  UseGuards,
 } from '@nestjs/common';
-import { TokenGuard } from 'src/auth/guards/token.guard';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
 import {
-  ApiTags,
+  ApiBearerAuth,
   ApiOperation,
   ApiResponse,
-  ApiBearerAuth,
+  ApiTags,
 } from '@nestjs/swagger';
-import { Request as ExpressRequest } from 'express';
-import { CreateScenarioGroupDto } from '../dtos/scenario-group.dto';
-import { ScenarioGroupService } from '../services/scenario-group.service';
 import { Role } from '@prisma/client';
-import { Roles } from 'src/auth/decorators/roles.decorator';
-
-interface RequestWithUser extends ExpressRequest {
-  user: {
-    userId: string;
-    email: string;
-    role: string;
-  };
-}
 
 @ApiBearerAuth()
 @ApiTags('api/v1/scenario-groups')
@@ -52,7 +44,7 @@ export class ScenarioGroupController {
 
     return {
       message: 'Scenario groups retrieved successfully',
-      scenarioGroups,
+      ...scenarioGroups,
     };
   }
 
@@ -60,11 +52,11 @@ export class ScenarioGroupController {
   @ApiOperation({ summary: 'Create a new scenario' })
   @ApiResponse({ status: 201, description: 'Scenario created successfully' })
   @Roles(Role.User)
-  create(
+  async create(
     @Request() req: RequestWithUser,
     @Body() createScenarioGroupDto: CreateScenarioGroupDto,
   ) {
-    const scenarioGroup = this.scenarioGroupService.create(
+    const scenarioGroup = await this.scenarioGroupService.create(
       req.user.userId,
       createScenarioGroupDto,
     );
@@ -82,14 +74,15 @@ export class ScenarioGroupController {
     description: 'Scenario group updated successfully',
   })
   @Roles(Role.User)
-  update(
+  async update(
     @Param('id') id: string,
     @Body() updateScenarioGroupDto: Partial<CreateScenarioGroupDto>,
   ) {
-    const scenarioGroup = this.scenarioGroupService.update(
+    const scenarioGroup = await this.scenarioGroupService.update(
       id,
       updateScenarioGroupDto,
     );
+
     return {
       message: 'Scenario group updated successfully',
       scenarioGroup,
@@ -104,7 +97,6 @@ export class ScenarioGroupController {
   })
   @Roles(Role.User)
   delete(@Param('id') id: string) {
-    console.log('id', id);
     const scenarioGroup = this.scenarioGroupService.delete(id);
     return {
       message: 'Scenario group deleted successfully',

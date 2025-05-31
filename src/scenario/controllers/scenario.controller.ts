@@ -1,36 +1,31 @@
+import { Roles } from '@/auth/decorators/roles.decorator';
+import { RolesGuard } from '@/auth/guards/roles.guard';
+import { TokenGuard } from '@/auth/guards/token.guard';
 import {
-  Controller,
-  Get,
-  Post,
+  CreateScenarioDto,
+  UpdateScenarioDto,
+} from '@/scenario/dtos/scenario.dto';
+import { ScenarioService } from '@/scenario/services/scenario.service';
+import { RequestWithUser } from '@/shared/types/request.types';
+import {
   Body,
-  Patch,
-  Param,
+  Controller,
   Delete,
-  UseGuards,
+  Get,
+  Param,
+  Patch,
+  Post,
   Request,
+  UseGuards,
 } from '@nestjs/common';
-import { ScenarioService } from '../services/scenario.service';
-import { CreateScenarioDto, UpdateScenarioDto } from '../dtos/scenario.dto';
-import { TokenGuard } from 'src/auth/guards/token.guard';
-import { RolesGuard } from 'src/auth/guards/roles.guard';
 import {
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
   ApiBearerAuth,
   ApiBody,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
 } from '@nestjs/swagger';
-import { Request as ExpressRequest } from 'express';
-import { Scenario, RunHistory, Role } from '@prisma/client';
-import { Roles } from 'src/auth/decorators/roles.decorator';
-
-interface RequestWithUser extends ExpressRequest {
-  user: {
-    userId: string;
-    email: string;
-    role: string;
-  };
-}
+import { Role, RunHistory, Scenario } from '@prisma/client';
 
 @ApiBearerAuth()
 @ApiTags('Scenarios')
