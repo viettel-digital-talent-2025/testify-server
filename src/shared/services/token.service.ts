@@ -1,7 +1,7 @@
+import serverConfig from '@/shared/config';
+import { TokenPayload } from '@/shared/types/jwt.types';
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { TokenPayload } from '../types/jwt.type';
-import serverConfig from '../config';
 
 @Injectable()
 export class TokenService {
@@ -9,30 +9,30 @@ export class TokenService {
 
   signAccessToken(payload: TokenPayload): string {
     return this.jwtService.sign(payload, {
-      secret: serverConfig.ACCESS_TOKEN_SECRET,
-      expiresIn: serverConfig.ACCESS_TOKEN_EXPIRATION,
+      secret: serverConfig.jwt.ACCESS_TOKEN_SECRET,
+      expiresIn: serverConfig.jwt.ACCESS_TOKEN_EXPIRATION,
       algorithm: 'HS256',
     });
   }
 
   signRefreshToken(payload: TokenPayload): string {
     return this.jwtService.sign(payload, {
-      secret: serverConfig.REFRESH_TOKEN_SECRET,
-      expiresIn: serverConfig.REFRESH_TOKEN_EXPIRATION,
+      secret: serverConfig.jwt.REFRESH_TOKEN_SECRET,
+      expiresIn: serverConfig.jwt.REFRESH_TOKEN_EXPIRATION,
       algorithm: 'HS256',
     });
   }
 
   async verifyAccessToken(token: string): Promise<TokenPayload> {
     return await this.jwtService.verifyAsync(token, {
-      secret: serverConfig.ACCESS_TOKEN_SECRET,
+      secret: serverConfig.jwt.ACCESS_TOKEN_SECRET,
       algorithms: ['HS256'],
     });
   }
 
   async verifyRefreshToken(token: string): Promise<TokenPayload> {
     return await this.jwtService.verifyAsync(token, {
-      secret: serverConfig.REFRESH_TOKEN_SECRET,
+      secret: serverConfig.jwt.REFRESH_TOKEN_SECRET,
       algorithms: ['HS256'],
     });
   }

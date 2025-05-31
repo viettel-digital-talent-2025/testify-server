@@ -1,14 +1,22 @@
-import { Injectable } from '@nestjs/common';
+import serverConfig from '@/shared/config';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import bcrypt from 'bcrypt';
-import serverConfig from '../config';
 
 @Injectable()
 export class HashingService {
   async hash(value: string): Promise<string> {
-    return bcrypt.hash(value, serverConfig.SALT_ROUNDS);
+    try {
+      return await bcrypt.hash(value, serverConfig.jwt.SALT_ROUNDS);
+    } catch {
+      throw new InternalServerErrorException('Failed to hash password');
+    }
   }
 
   async compare(value: string, hash: string): Promise<boolean> {
-    return bcrypt.compare(value, hash);
+    try {
+      return await bcrypt.compare(value, hash);
+    } catch {
+      throw new InternalServerErrorException('Failed to compare passwords');
+    }
   }
 }
