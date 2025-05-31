@@ -1,29 +1,91 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { RunHistoryRepository } from './run-history.repository';
 import {
-  RunHistoryCreateInput,
-  RunHistoryUpdateInput,
+  RunHistoryQueryDto,
   RunHistoryWhereInput,
   RunHistoryWhereUniqueInput,
   RunHistoryWithMetrics,
-} from './run-history.model';
+} from '@/run-history/run-history.dto';
+import { RunHistoryRepository } from '@/run-history/run-history.repository';
+import { AppLoggerService } from '@/shared/services/app-logger.service';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { RunHistoryStatus } from '@prisma/client';
 
 @Injectable()
 export class RunHistoryService {
-  private readonly logger = new Logger(RunHistoryService.name);
+  constructor(
+    private readonly logger: AppLoggerService,
+    private readonly repository: RunHistoryRepository,
+  ) {
+    this.logger.setContext(RunHistoryService.name);
+  }
 
-  constructor(private repository: RunHistoryRepository) {}
+  isValidDate(value: any): value is Date {
+    return value instanceof Date && !isNaN(value.getTime());
+  }
 
-  async create(data: RunHistoryCreateInput): Promise<RunHistoryWithMetrics> {
-    try {
-      return await this.repository.create(data);
-    } catch (error) {
-      this.logger.error(
-        `Failed to create run history: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-      throw error;
+  parseDate(input: unknown): Date | null {
+    if (typeof input === 'string') {
+      const date = new Date(input);
+      return isNaN(date.getTime()) ? null : date;
     }
+    return null;
+  }
+
+  private parseStatus(
+    status: string | string[] | undefined,
+  ): RunHistoryStatus[] | undefined {
+    if (!status || status === '' || status === 'null') return undefined;
+
+    const statusArray = Array.isArray(status) ? status : status.split(',');
+    const validStatuses = statusArray
+      .map((s) => s.trim().toUpperCase())
+      .filter((s): s is RunHistoryStatus =>
+        Object.values(RunHistoryStatus).includes(s as RunHistoryStatus),
+      );
+
+    return validStatuses.length > 0 ? validStatuses : undefined;
+  }
+
+  buildWhere(query: RunHistoryQueryDto, scenarioId: string) {
+    const where: RunHistoryWhereInput = {};
+    if (scenarioId && scenarioId !== 'undefined' && scenarioId !== 'null') {
+      where.scenarioId = scenarioId;
+    }
+
+    if (query.search) {
+      where.scenario = {
+        name: {
+          contains: query.search,
+          mode: 'insensitive',
+        },
+      };
+    }
+
+    const statuses = this.parseStatus(query.status);
+    if (statuses && statuses.length > 0) {
+      where.status = { in: statuses };
+    }
+
+    const startTime = this.parseDate(query.startTime);
+    const endTime = this.parseDate(query.endTime);
+    if (startTime || endTime) {
+      where.runAt = {};
+      if (this.isValidDate(startTime)) {
+        where.runAt.gte = startTime;
+      }
+      if (this.isValidDate(endTime)) {
+        where.runAt.lte = endTime;
+      }
+    }
+    return where;
+  }
+
+  buildPaging(query: RunHistoryQueryDto) {
+    const { skip, take } = query;
+    const orderBy =
+      query.orderBy && query.order
+        ? { [query.orderBy]: query.order }
+        : undefined;
+    return { skip, take, orderBy };
   }
 
   async findOne(
@@ -44,7 +106,7 @@ export class RunHistoryService {
   }): Promise<{ data: RunHistoryWithMetrics[]; total: number }> {
     try {
       const [data, total] = await Promise.all([
-        this.repository.findMany(params),
+        this.repository.findMany({ ...params, where: params.where }),
         this.repository.count(params.where),
       ]);
 
@@ -52,40 +114,6 @@ export class RunHistoryService {
     } catch (error) {
       this.logger.error(
         `Failed to find run histories: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-      throw error;
-    }
-  }
-
-  async findByScenarioId(
-    scenarioId: string,
-    params: {
-      skip?: number;
-      take?: number;
-      orderBy?: { [key: string]: 'asc' | 'desc' };
-    },
-  ): Promise<{ data: RunHistoryWithMetrics[]; total: number }> {
-    return this.findAll({
-      ...params,
-      where: { scenarioId },
-    });
-  }
-
-  async update(params: {
-    where: RunHistoryWhereUniqueInput;
-    data: RunHistoryUpdateInput;
-  }): Promise<RunHistoryWithMetrics> {
-    try {
-      // Check if exists
-      await this.findOne(params.where);
-
-      return await this.repository.update(params);
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      this.logger.error(
-        `Failed to update run history: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
       throw error;
     }
@@ -108,50 +136,5 @@ export class RunHistoryService {
       );
       throw error;
     }
-  }
-
-  async markAsSuccess(
-    id: string,
-    metrics: {
-      successRate: number;
-      avgResponseTime: number;
-      errorRate: number;
-      requestsPerSecond: number;
-    },
-  ): Promise<RunHistoryWithMetrics> {
-    return this.update({
-      where: { id },
-      data: {
-        ...metrics,
-        status: RunHistoryStatus.SUCCESS,
-      },
-    });
-  }
-
-  async markAsFailed(
-    id: string,
-    metrics: {
-      successRate: number;
-      avgResponseTime: number;
-      errorRate: number;
-      requestsPerSecond: number;
-    },
-  ): Promise<RunHistoryWithMetrics> {
-    return this.update({
-      where: { id },
-      data: {
-        ...metrics,
-        status: RunHistoryStatus.FAILED,
-      },
-    });
-  }
-
-  async markAsAborted(id: string): Promise<RunHistoryWithMetrics> {
-    return this.update({
-      where: { id },
-      data: {
-        status: RunHistoryStatus.ABORTED,
-      },
-    });
   }
 }

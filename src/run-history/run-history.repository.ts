@@ -1,38 +1,21 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from 'src/shared/services/prisma.service';
 import {
-  RunHistoryCreateInput,
-  RunHistoryUpdateInput,
   RunHistoryWhereInput,
   RunHistoryWhereUniqueInput,
   RunHistoryWithMetrics,
-} from './run-history.model';
+  RunHistoryWithScenario,
+} from '@/run-history/run-history.dto';
+import { AppLoggerService } from '@/shared/services/app-logger.service';
+import { PrismaService } from '@/shared/services/prisma.service';
+import { Injectable } from '@nestjs/common';
+import { Prisma, RunHistory, RunHistoryStatus } from '@prisma/client';
 
 @Injectable()
 export class RunHistoryRepository {
-  private readonly logger = new Logger(RunHistoryRepository.name);
-
-  constructor(private prisma: PrismaService) {}
-
-  async create(data: RunHistoryCreateInput): Promise<RunHistoryWithMetrics> {
-    try {
-      return await this.prisma.runHistory.create({
-        data,
-        include: {
-          scenario: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-        },
-      });
-    } catch (error) {
-      this.logger.error(
-        `Failed to create run history: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-      throw error;
-    }
+  constructor(
+    private readonly logger: AppLoggerService,
+    private readonly prisma: PrismaService,
+  ) {
+    this.logger.setContext(RunHistoryRepository.name);
   }
 
   async findUnique(
@@ -65,8 +48,14 @@ export class RunHistoryRepository {
     orderBy?: { [key: string]: 'asc' | 'desc' };
   }): Promise<RunHistoryWithMetrics[]> {
     try {
-      return await this.prisma.runHistory.findMany({
-        ...params,
+      const { where, skip, take, orderBy } = params;
+
+      // Build the query
+      const query: Prisma.RunHistoryFindManyArgs = {
+        where,
+        skip: skip ?? 0,
+        take: take ?? 10,
+        orderBy: orderBy ?? { createdAt: 'desc' },
         include: {
           scenario: {
             select: {
@@ -75,37 +64,90 @@ export class RunHistoryRepository {
             },
           },
         },
-      });
+      };
+
+      const results = (await this.prisma.runHistory.findMany(
+        query,
+      )) as RunHistoryWithScenario[];
+
+      // The results now include the scenario field from Prisma
+      return results;
     } catch (error) {
       this.logger.error(
         `Failed to find run histories: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error instanceof Error ? error.stack : undefined,
       );
       throw error;
     }
   }
 
-  async update(params: {
-    where: RunHistoryWhereUniqueInput;
-    data: RunHistoryUpdateInput;
-  }): Promise<RunHistoryWithMetrics> {
+  async findRunningRunHistory(scenarioId: string): Promise<RunHistory | null> {
+    return await this.prisma.runHistory.findFirst({
+      where: {
+        scenarioId,
+        status: RunHistoryStatus.RUNNING,
+      },
+      orderBy: { runAt: 'desc' },
+    });
+  }
+
+  async findRunningRunHistories(scenarioId: string): Promise<RunHistory[]> {
+    return await this.prisma.runHistory.findMany({
+      where: { scenarioId, status: RunHistoryStatus.RUNNING },
+      orderBy: { runAt: 'desc' },
+    });
+  }
+
+  async create(data: {
+    scenarioId: string;
+    runAt: Date;
+    vus: number;
+    duration: number;
+    status: RunHistoryStatus;
+    successRate: number;
+    avgResponseTime: number;
+    errorRate: number;
+    requestsPerSecond: number;
+  }): Promise<RunHistory> {
+    return await this.prisma.runHistory.create({
+      data,
+    });
+  }
+
+  async update(
+    id: string,
+    data: {
+      status?: RunHistoryStatus;
+      progress?: number;
+      avgResponseTime?: number;
+      errorRate?: number;
+      successRate?: number;
+      requestsPerSecond?: number;
+    },
+  ): Promise<RunHistory> {
     try {
       return await this.prisma.runHistory.update({
-        ...params,
-        include: {
-          scenario: {
-            select: {
-              id: true,
-              name: true,
-            },
-          },
+        where: { id },
+        data: {
+          ...data,
+          endAt:
+            data.status !== RunHistoryStatus.RUNNING ? new Date() : undefined,
         },
       });
     } catch (error) {
-      this.logger.error(
-        `Failed to update run history: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
+      this.logger.error(`Failed to update run history ${id}:`);
       throw error;
     }
+  }
+
+  async updateStatus(
+    id: string,
+    status: RunHistoryStatus,
+  ): Promise<RunHistory> {
+    return await this.prisma.runHistory.update({
+      where: { id },
+      data: { status },
+    });
   }
 
   async delete(
@@ -133,10 +175,12 @@ export class RunHistoryRepository {
 
   async count(where?: RunHistoryWhereInput): Promise<number> {
     try {
-      return await this.prisma.runHistory.count({ where });
+      const query: Prisma.RunHistoryCountArgs = { where };
+      return await this.prisma.runHistory.count(query);
     } catch (error) {
       this.logger.error(
         `Failed to count run histories: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error instanceof Error ? error.stack : undefined,
       );
       throw error;
     }
