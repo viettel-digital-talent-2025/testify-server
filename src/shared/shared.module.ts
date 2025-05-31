@@ -1,13 +1,14 @@
+import { AppLoggerService } from '@/shared/services/app-logger.service';
+import { HashingService } from '@/shared/services/hashing.service';
+import { PrismaService } from '@/shared/services/prisma.service';
+import { TokenService } from '@/shared/services/token.service';
 import { Global, Module } from '@nestjs/common';
-import { PrismaService } from './services/prisma.service';
-import { HashingService } from './services/hashing.service';
-import { TokenService } from './services/token.service';
 import { JwtModule } from '@nestjs/jwt';
 
 @Global()
 @Module({
   imports: [JwtModule],
-  exports: [PrismaService, HashingService, TokenService],
-  providers: [PrismaService, HashingService, TokenService],
+  exports: [PrismaService, HashingService, TokenService, AppLoggerService],
+  providers: [PrismaService, HashingService, TokenService, AppLoggerService],
 })
 export class SharedModule {}
