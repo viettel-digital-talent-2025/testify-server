@@ -1,5 +1,11 @@
-import { Scenario, ScenarioFlow, ScenarioFlowStep } from '@prisma/client';
 import { ChildProcess } from 'child_process';
+
+import {
+  RunHistoryStatus,
+  Scenario,
+  ScenarioFlow,
+  ScenarioFlowStep,
+} from '@prisma/client';
 
 export interface Endpoint {
   id: string;
@@ -44,10 +50,17 @@ export interface ActiveTest {
 export interface LoadTestCompletedEvent {
   scenarioId: string;
   runHistoryId: string;
+  status: RunHistoryStatus;
+}
+
+export interface LoadTestStartedEventInput {
+  scenarioId: string;
+  runHistoryId: string;
+  status?: RunHistoryStatus;
 }
 
 export type ScenarioWithFlowsAndSteps = Scenario & {
-  Flows: Array<
+  flows: Array<
     ScenarioFlow & {
       steps: Array<
         ScenarioFlowStep & {
@@ -62,3 +75,15 @@ export type ScenarioWithFlowsAndSteps = Scenario & {
     }
   >;
 };
+
+export interface LoadTestStatusEvent {
+  scenarioId: string;
+  runHistoryId: string;
+  status: RunHistoryStatus;
+  metrics?: {
+    avgResponseTime: number;
+    errorRate: number;
+    successRate: number;
+    requestsPerSecond: number;
+  };
+}
