@@ -1,7 +1,7 @@
+import { CreateScenarioDto } from '@/scenario/dtos/scenario.dto';
+import { ScenarioRepository } from '@/scenario/repositories/scenario.repository';
 import { Injectable } from '@nestjs/common';
-import { ScenarioRepository } from '../repositories/scenario.repository';
-import { CreateScenarioDto } from '../dtos/scenario.dto';
-import { Scenario, RunHistory, Prisma } from '@prisma/client';
+import { Prisma, RunHistory, Scenario } from '@prisma/client';
 
 export class UpdateScenarioDto extends CreateScenarioDto {}
 
@@ -31,7 +31,7 @@ export class ScenarioService {
       ...scenarioData,
       user: { connect: { id: userId } },
       group: groupId ? { connect: { id: groupId } } : undefined,
-      Flows: {
+      flows: {
         create: flows.map((flow, index) => ({
           ...flow,
           order: flow.order ?? index,
@@ -56,27 +56,13 @@ export class ScenarioService {
   ): Promise<Scenario> {
     const { flows, ...scenarioData } = updateScenarioDto;
 
-    return this.scenarioRepository.update(
-      id,
-      {
-        ...scenarioData,
-        Flows: {
-          deleteMany: {},
-          create: flows.map((flow, index) => ({
-            ...flow,
-            order: flow.order ?? index,
-            steps: {
-              create: flow.steps.map((step, stepIndex) => ({
-                ...step,
-                order: step.order ?? stepIndex,
-                config: step.config as Prisma.InputJsonValue,
-              })),
-            },
-          })),
-        },
-      },
-      userId,
-    );
+    await Promise.all([
+      this.findOne(id, userId),
+      this.scenarioRepository.updateMetadata(id, scenarioData),
+      this.scenarioRepository.syncFlows(id, flows),
+    ]);
+
+    return this.scenarioRepository.findOne(id, userId);
   }
 
   async remove(id: string, userId: string): Promise<Scenario> {

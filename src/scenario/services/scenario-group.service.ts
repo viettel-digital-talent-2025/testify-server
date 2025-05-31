@@ -1,18 +1,25 @@
+import { CreateScenarioGroupDto } from '@/scenario/dtos/scenario-group.dto';
+import { ScenarioGroupRepository } from '@/scenario/repositories/scenario-group.repository';
+import { ScenarioRepository } from '@/scenario/repositories/scenario.repository';
 import { Injectable } from '@nestjs/common';
-import { ScenarioGroupRepository } from '../repositories/scenario-group.repository';
-import {
-  CreateScenarioGroupDto,
-  ScenarioGroupDto,
-} from '../dtos/scenario-group.dto';
 
 @Injectable()
 export class ScenarioGroupService {
   constructor(
+    private readonly scenarioRepository: ScenarioRepository,
     private readonly scenarioGroupRepository: ScenarioGroupRepository,
   ) {}
 
-  async findAll(userId: string): Promise<ScenarioGroupDto[]> {
-    return this.scenarioGroupRepository.findAll(userId);
+  async findAll(userId: string) {
+    const scenarioGroups = await this.scenarioGroupRepository.findAll(userId);
+    const scenarios = await this.scenarioRepository.findAllByGroupId(
+      'null',
+      userId,
+    );
+    return {
+      scenarioGroups,
+      scenarios,
+    };
   }
 
   async create(userId: string, data: CreateScenarioGroupDto) {
