@@ -1,5 +1,5 @@
-import { IsString, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { IsOptional, IsString } from 'class-validator';
 
 export class CreateScenarioGroupDto {
   @ApiProperty({
@@ -17,21 +17,4 @@ export class CreateScenarioGroupDto {
   @IsString()
   @IsOptional()
   description: string;
-
-  @ApiProperty({
-    description: 'Color of the scenario group',
-    example: '#000000',
-    required: false,
-  })
-  @IsString()
-  @IsOptional()
-  color: string;
-}
-
-export class ScenarioGroupDto {
-  id: string;
-  name: string;
-  description: string | null;
-  color: string | null;
-  count: number;
 }

@@ -1,15 +1,25 @@
+import { ApiProperty } from '@nestjs/swagger';
 import {
-  IsString,
+  Prisma,
+  RunHistoryStatus,
+  Scenario,
+  ScenarioFlow,
+  ScenarioFlowStep,
+  ScenarioFlowStepType,
+  ScenarioFlowType,
+  ScenarioGroup,
+  ScenarioType,
+} from '@prisma/client';
+import { Type } from 'class-transformer';
+import {
+  IsArray,
+  IsEnum,
   IsInt,
   IsObject,
   IsOptional,
+  IsString,
   Min,
-  IsArray,
-  IsEnum,
 } from 'class-validator';
-import { Type } from 'class-transformer';
-import { ScenarioFlowStepType, ScenarioType } from '@prisma/client';
-import { ApiProperty } from '@nestjs/swagger';
 
 export class ScenarioFlowStepDto {
   @ApiProperty({
@@ -111,7 +121,7 @@ export class CreateScenarioDto {
   })
   @IsString()
   @IsOptional()
-  groupId?: string;
+  groupId: string;
 
   @ApiProperty({
     description: 'The name of the scenario',
@@ -137,6 +147,14 @@ export class CreateScenarioDto {
   })
   @IsEnum(ScenarioType)
   type: ScenarioType;
+
+  @ApiProperty({
+    description: 'The flow type of the scenario',
+    example: 'ScenarioFlowType.Sequential',
+    required: true,
+  })
+  @IsEnum(ScenarioFlowType)
+  flowType: ScenarioFlowType;
 
   @ApiProperty({
     description: 'The number of virtual users of the scenario',
@@ -166,6 +184,62 @@ export class CreateScenarioDto {
   flows: ScenarioFlowDto[];
 }
 
+export class UpdateStepDto extends ScenarioFlowStepDto {
+  @ApiProperty({
+    description: 'The id of the step',
+    example: 'Step 1',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  id?: string;
+}
+
+export class UpdateFlowDto extends ScenarioFlowDto {
+  @ApiProperty({
+    description: 'The id of the flow',
+    example: 'Flow 1',
+    required: false,
+  })
+  @IsString()
+  @IsOptional()
+  id?: string;
+
+  @ApiProperty({
+    description: 'The steps of the flow',
+    example: [UpdateStepDto],
+    required: true,
+  })
+  @IsArray()
+  @Type(() => UpdateStepDto)
+  declare steps: UpdateStepDto[];
+}
 export class UpdateScenarioDto extends CreateScenarioDto {
-  declare groupId?: string;
+  @ApiProperty({
+    description: 'The flows of the scenario',
+    example: [ScenarioFlowDto],
+    required: false,
+  })
+  @IsArray()
+  @IsOptional()
+  @Type(() => UpdateFlowDto)
+  declare flows: UpdateFlowDto[];
+}
+
+export type CreateScenarioInput = Prisma.ScenarioCreateInput;
+export type UpdateScenarioInput = Prisma.ScenarioUpdateInput;
+
+export interface ScenarioFlowsWithSteps extends ScenarioFlow {
+  steps: ScenarioFlowStep[];
+}
+
+export interface ScenarioDto extends Scenario {
+  group: ScenarioGroup | null;
+  flows: ScenarioFlowsWithSteps[];
+  runHistories: {
+    status: RunHistoryStatus;
+    runAt: Date;
+    endAt: Date | null;
+    progress: number;
+  }[];
 }
