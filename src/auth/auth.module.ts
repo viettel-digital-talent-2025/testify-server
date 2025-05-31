@@ -1,9 +1,9 @@
-import { Module } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { AuthController } from './auth.controller';
-import { UserModule } from 'src/user/user.module';
+import { AuthController } from '@/auth/auth.controller';
+import { AuthService } from '@/auth/auth.service';
+import { MailService } from '@/shared/services/mail.service';
+import { UserModule } from '@/user/user.module';
 import { RedisModule } from '@nestjs-modules/ioredis';
-import { MailService } from 'src/shared/services/mail.service';
+import { Module } from '@nestjs/common';
 
 @Module({
   imports: [UserModule, RedisModule],

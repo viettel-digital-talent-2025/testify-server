@@ -1,25 +1,14 @@
+import { USER_KEY } from '@/auth/constants/auth.constant';
+import { RequestWithAuth } from '@/auth/types/auth.types';
+import { TokenService } from '@/shared/services/token.service';
+import { InjectRedis } from '@nestjs-modules/ioredis';
 import {
-  Injectable,
   CanActivate,
   ExecutionContext,
+  Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { TokenService } from '../../shared/services/token.service';
-import { USER_KEY } from '../constants/auth.constant';
 import { Redis } from 'ioredis';
-import { Request } from 'express';
-import { TokenPayload } from 'src/shared/types/jwt.type';
-import { InjectRedis } from '@nestjs-modules/ioredis';
-
-interface RequestWithAuth extends Request {
-  headers: {
-    authorization?: string;
-  };
-  cookies: {
-    refreshToken?: string;
-  };
-  [USER_KEY]?: TokenPayload;
-}
 
 @Injectable()
 export class TokenGuard implements CanActivate {

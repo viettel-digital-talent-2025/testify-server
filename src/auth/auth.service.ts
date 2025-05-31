@@ -1,17 +1,17 @@
+import { LoginDto, RegisterDto } from '@/auth/dtos/auth.dto';
+import { HashingService } from '@/shared/services/hashing.service';
+import { MailService } from '@/shared/services/mail.service';
+import { TokenService } from '@/shared/services/token.service';
+import { TokenPayload } from '@/shared/types/jwt.types';
+import { UserRepository } from '@/user/user.repository';
+import { InjectRedis } from '@nestjs-modules/ioredis';
 import {
   Injectable,
   InternalServerErrorException,
-  UnauthorizedException,
   Logger,
+  UnauthorizedException,
 } from '@nestjs/common';
-import { TokenService } from 'src/shared/services/token.service';
-import { HashingService } from 'src/shared/services/hashing.service';
-import { UserRepository } from 'src/user/user.repository';
-import { TokenPayload } from 'src/shared/types/jwt.type';
-import { RegisterDto, LoginDto } from './dtos/auth.dto';
-import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Redis } from 'ioredis';
-import { MailService } from 'src/shared/services/mail.service';
 
 @Injectable()
 export class AuthService {
@@ -67,7 +67,6 @@ export class AuthService {
       email,
       hashedPassword,
     );
-
     if (!user) throw new UnauthorizedException('Account already exists');
 
     const payload: TokenPayload = {

@@ -1,29 +1,24 @@
+import { AuthService } from '@/auth/auth.service';
+import { LoginDto, RegisterDto } from '@/auth/dtos/auth.dto';
 import {
-  HttpCode,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  VerifyOtpDto,
+} from '@/auth/dtos/recovery-password.dto';
+import { RequestWithCookies } from '@/shared/types/request.types';
+import {
   Body,
-  Get,
-  Post,
-  Delete,
   Controller,
+  Delete,
+  Get,
+  HttpCode,
+  Post,
   Req,
   Res,
   UnauthorizedException,
 } from '@nestjs/common';
-import { Request, Response } from 'express';
-import { AuthService } from './auth.service';
-import { RegisterDto, LoginDto } from './dtos/auth.dto';
-import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
-import {
-  ForgotPasswordDto,
-  VerifyOtpDto,
-  ResetPasswordDto,
-} from './dtos/recovery-password.dto';
-
-interface RequestWithCookies extends Request {
-  cookies: {
-    refreshToken?: string;
-  };
-}
+import { ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { Response } from 'express';
 
 @ApiTags('api/v1/auth')
 @Controller('api/v1/auth')

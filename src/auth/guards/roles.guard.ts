@@ -1,19 +1,14 @@
+import { USER_KEY } from '@/auth/constants/auth.constant';
+import { ROLES_KEY, RoleLevel } from '@/auth/decorators/roles.decorator';
+import { RequestWithUser } from '@/shared/types/request.types';
 import {
-  Injectable,
   CanActivate,
   ExecutionContext,
+  Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Role } from '@prisma/client';
-import { USER_KEY } from '../constants/auth.constant';
-import { ROLES_KEY, RoleLevel } from '../decorators/roles.decorator';
-import { Request } from 'express';
-import { TokenPayload } from 'src/shared/types/jwt.type';
-
-interface RequestWithUser extends Request {
-  [USER_KEY]?: TokenPayload;
-}
 
 @Injectable()
 export class RolesGuard implements CanActivate {
