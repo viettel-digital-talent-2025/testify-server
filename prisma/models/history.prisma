@@ -3,12 +3,14 @@ model RunHistory {
     scenarioId        String
     scenario          Scenario         @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
     runAt             DateTime
+    endAt             DateTime?
     vus               Int
     duration          Int
     successRate       Float
     avgResponseTime   Float
     errorRate         Float
     requestsPerSecond Float
+    progress          Float            @default(0)
     status            RunHistoryStatus @default(SUCCESS)
     rawResultUrl      String?
     createdAt         DateTime         @default(now())

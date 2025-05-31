@@ -1,21 +1,22 @@
 model Scenario {
-  id          String         @id @default(cuid())
+  id          String           @id @default(cuid())
   userId      String
-  user        User           @relation(fields: [userId], references: [id])
+  user        User             @relation(fields: [userId], references: [id])
   groupId     String?
-  group       ScenarioGroup? @relation(fields: [groupId], references: [id])
+  group       ScenarioGroup?   @relation(fields: [groupId], references: [id])
   name        String
   description String?
   type        ScenarioType
+  flowType    ScenarioFlowType
   vus         Int
   duration    Int
   lastRun     DateTime?
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
-  Flows      ScenarioFlow[]
-  Scheduler  Scheduler[]
-  RunHistory RunHistory[]
+  flows        ScenarioFlow[]
+  schedulers   Scheduler[]
+  runHistories RunHistory[]
 }
 
 enum ScenarioType {
@@ -23,4 +24,9 @@ enum ScenarioType {
   API
   DATABASE
   USER_FLOW
+}
+
+enum ScenarioFlowType {
+  SIMPLE
+  MULTI
 }
