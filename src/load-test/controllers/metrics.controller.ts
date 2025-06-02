@@ -52,9 +52,10 @@ export class MetricsController {
     @Req() req: RequestWithUser,
     @Param('scenarioId') scenarioId: string,
     @Param('runHistoryId') runHistoryId: string,
-    @Query('duration') duration?: string,
     @Query('flow_id') flowId?: string,
     @Query('step_id') stepId?: string,
+    @Query('duration') duration?: string,
+    @Query('interval') interval?: string,
   ): Promise<MetricsResponse> {
     try {
       const tags = {
@@ -67,6 +68,7 @@ export class MetricsController {
         scenarioId,
         runHistoryId,
         duration,
+        interval,
         tags: Object.keys(tags).length > 0 ? tags : undefined,
       });
     } catch (error) {

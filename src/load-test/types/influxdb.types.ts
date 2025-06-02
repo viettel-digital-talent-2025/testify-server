@@ -15,7 +15,7 @@ export interface InfluxDBQueryParams {
   scenarioId: string;
   duration: string;
   metrics: string[];
-  interval?: string; // e.g., "5s", "1m"
+  interval?: string;
 }
 
 export interface InfluxDBQueryResult {
@@ -57,6 +57,8 @@ export interface MetricsQueryOptions {
     flow_id?: string;
     step_id?: string;
   };
+  runAt?: Date;
+  endAt?: Date | null;
 }
 
 export interface TagInspectionResult {

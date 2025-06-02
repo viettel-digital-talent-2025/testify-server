@@ -1,5 +1,4 @@
 import {
-  InfluxDBMetric,
   InfluxQueryResult,
   MetricData,
   MetricsQueryOptions,
@@ -118,7 +117,7 @@ export class InfluxDBService implements OnModuleInit {
     }
   }
 
-  private convertNanoDateToDate(nanoDate: Influx.INanoDate): Date {
+  convertNanoDateToDate(nanoDate: Influx.INanoDate): Date {
     try {
       // Convert nanoseconds to milliseconds for JavaScript Date
       const nanoTime = Number(nanoDate.getNanoTime());
@@ -261,15 +260,15 @@ export class InfluxDBService implements OnModuleInit {
 
   async queryMetrics(
     options: MetricsQueryOptions,
-    runAt?: Date,
-    endAt?: Date | null,
-  ): Promise<InfluxDBMetric[]> {
+  ): Promise<InfluxQueryResult[][]> {
     const {
       scenarioId,
       duration = '1m',
-      interval = '5s',
+      interval = '1s',
       metrics,
       tags,
+      runAt,
+      endAt,
     } = options;
 
     try {
@@ -302,6 +301,7 @@ export class InfluxDBService implements OnModuleInit {
               AND time > ${runAt ? `'${runAt.toISOString()}'` : timeRange}
               AND time < ${endAt ? `'${endAt.toISOString()}'` : 'now()'}
               GROUP BY time(${interval}), flow_id, step_id
+              ORDER BY time ASC
             `;
             break;
           case 'errors':
@@ -315,6 +315,7 @@ export class InfluxDBService implements OnModuleInit {
               AND time > ${runAt ? `'${runAt.toISOString()}'` : timeRange}
               AND time < ${endAt ? `'${endAt.toISOString()}'` : 'now()'}
               GROUP BY time(${interval}), flow_id, step_id
+              ORDER BY time ASC
             `;
             break;
           case 'http_reqs':
@@ -328,6 +329,7 @@ export class InfluxDBService implements OnModuleInit {
               AND time > ${runAt ? `'${runAt.toISOString()}'` : timeRange}
               AND time < ${endAt ? `'${endAt.toISOString()}'` : 'now()'}
               GROUP BY time(${interval}), flow_id, step_id
+              ORDER BY time ASC
             `;
             break;
           default:
@@ -342,43 +344,11 @@ export class InfluxDBService implements OnModuleInit {
       }
 
       try {
-        const results: InfluxDBMetric[] = [];
-
-        // Execute all queries in parallel
         const queryResults = await Promise.all(
           queries.map(({ query }) => this.query<InfluxQueryResult>(query)),
         );
 
-        // Process results
-        for (let i = 0; i < queryResults.length; i++) {
-          const queryResult = queryResults[i];
-          const { measurement } = queries[i];
-
-          for (const row of queryResult) {
-            if (
-              row.time !== null &&
-              typeof row.time === 'object' &&
-              'getNanoTime' in row.time
-            ) {
-              const metric: InfluxDBMetric = {
-                _measurement: measurement,
-                _value:
-                  measurement === 'http_req_duration'
-                    ? (row.mean ?? row.percentile_95 ?? 0)
-                    : Number(row.value ?? 0),
-                _time: this.convertNanoDateToDate(row.time).toISOString(),
-                scenario_id: scenarioId,
-                scenario_name: row.scenario_name || '',
-                test_type: row.test_type || '',
-                mean: row.mean,
-                percentile_95: row.percentile_95,
-              };
-              results.push(metric);
-            }
-          }
-        }
-
-        return results;
+        return queryResults;
       } catch (error) {
         this.logger.error(
           `Failed to query metrics: ${error instanceof Error ? error.message : 'Unknown error'}`,
