@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import {
   Bottleneck,
   BottleneckSeverity,
@@ -42,10 +43,17 @@ export interface BottleneckEvent {
   stepName: string;
 }
 
-export interface SseEvent {
-  data: string;
+export class SseEvent {
+  @ApiProperty({ description: 'Event type' })
   type: string;
+
+  @ApiProperty({ description: 'Event data' })
+  data: any;
+
+  @ApiProperty({ description: 'Event id' })
   id: string;
+
+  @ApiProperty({ description: 'Event retry' })
   retry: number;
 }
 
