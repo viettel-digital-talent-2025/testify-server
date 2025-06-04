@@ -1,3 +1,5 @@
+import { ApiProperty } from '@nestjs/swagger';
+
 export interface TimeSeriesPoint {
   timestamp: string;
   value: number;
@@ -21,25 +23,18 @@ export interface MetricsQuery {
   runHistoryId?: string;
   duration?: string;
   interval?: string; // e.g., "5s", "1m"
+  runAt?: string;
+  endAt?: string;
   tags?: {
     flow_id?: string;
     step_id?: string;
   };
 }
 
-export interface MetricsResponse {
-  scenarioId: string;
-  runHistoryId?: string;
-  scenarioName: string;
-  duration: string;
-  interval: string;
-  tags?: {
-    flow_id?: string;
-    step_id?: string;
-  };
-  metrics: Metrics;
-  progress: number;
-  lastUpdated: string;
-  runAt: string;
-  endAt: string | null;
+export class MetricsResponse {
+  @ApiProperty({ description: 'Metrics data' })
+  data: any;
+
+  @ApiProperty({ description: 'Query metadata' })
+  metadata: any;
 }
