@@ -9,7 +9,8 @@ model ScenarioFlow {
     createdAt   DateTime @default(now())
     updatedAt   DateTime @updatedAt
 
-    steps ScenarioFlowStep[]
+    steps            ScenarioFlowStep[]
+    bottlenecks      Bottleneck[]
 }
 
 model ScenarioFlowStep {
@@ -21,6 +22,8 @@ model ScenarioFlowStep {
     type        ScenarioFlowStepType
     config      Json
     order       Int
+
+    bottlenecks Bottleneck[]
 }
 
 enum ScenarioFlowStepType {

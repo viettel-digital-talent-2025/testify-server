@@ -1,14 +1,16 @@
 model User {
-  id             String          @id @default(cuid())
-  firstname      String
-  lastname       String
-  email          String          @unique
-  password       String
-  role           Role            @default(User)
+  id        String   @id @default(cuid())
+  firstname String
+  lastname  String
+  email     String   @unique
+  password  String
+  role      Role     @default(User)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   scenarios      Scenario[]
   scenarioGroups ScenarioGroup[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  bottlenecks    Bottleneck[]
 }
 
 enum Role {

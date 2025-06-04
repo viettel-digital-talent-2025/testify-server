@@ -14,9 +14,10 @@ model Scenario {
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
-  flows        ScenarioFlow[]
-  schedulers   Scheduler[]
-  runHistories RunHistory[]
+  flows             ScenarioFlow[]
+  schedulers        Scheduler[]
+  runHistories      RunHistory[]
+  bottlenecks       Bottleneck[]
 }
 
 enum ScenarioType {

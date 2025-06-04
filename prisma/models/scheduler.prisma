@@ -6,6 +6,7 @@ model Scheduler {
     timeEnd        DateTime?
     cronExpression String
     timezone       String
+    config         Json      @default("{}")
     isActive       Boolean   @default(true)
     createdAt      DateTime  @default(now())
     updatedAt      DateTime  @updatedAt

@@ -1,0 +1,31 @@
+model Bottleneck {
+    id           String    @id @default(cuid())
+    userId       String
+    scenarioId   String
+    runHistoryId String
+    flowId       String
+    stepId       String
+    severity     BottleneckSeverity // LOW, MEDIUM, HIGH
+    timestamp    DateTime
+    latency      Float
+    throughput   Float
+    errorRate    Float
+    isRead       Boolean   @default(false)
+    alertAt      DateTime?
+    analysis     String?
+    createdAt    DateTime  @default(now())
+    updatedAt    DateTime  @updatedAt
+
+    // Relations
+    user       User             @relation(fields: [userId], references: [id])
+    scenario   Scenario         @relation(fields: [scenarioId], references: [id])
+    runHistory RunHistory       @relation(fields: [runHistoryId], references: [id])
+    flow       ScenarioFlow     @relation(fields: [flowId], references: [id])
+    step       ScenarioFlowStep @relation(fields: [stepId], references: [id])
+}
+
+enum BottleneckSeverity {
+    LOW
+    MEDIUM
+    HIGH
+}
