@@ -14,23 +14,18 @@ import {
 } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Role, RunHistory } from '@prisma/client';
-import { merge, Observable, of } from 'rxjs';
+import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import {
   LoadTestsService,
   ScenarioStatusUpdate,
 } from '../services/load-tests.service';
-import { MetricsService } from '../services/metrics.service';
-import { LoadTestCompletedEvent } from '../types/load-test.types';
 
 @ApiTags('api/v1/load-tests')
 @Controller('api/v1/load-tests')
 export class LoadTestsController {
-  constructor(
-    private readonly loadTestsService: LoadTestsService,
-    private readonly metricsService: MetricsService,
-  ) {}
+  constructor(private readonly loadTestsService: LoadTestsService) {}
 
   @Post(':scenarioId/run')
   @HttpCode(HttpStatus.OK)
@@ -76,38 +71,6 @@ export class LoadTestsController {
     @Req() req: RequestWithUser,
   ): Promise<RunHistory> {
     return await this.loadTestsService.stopTest(scenarioId, req.user.userId);
-  }
-
-  @Sse(':scenarioId/status')
-  loadTestStatus(
-    @Param('scenarioId') scenarioId: string,
-    @Req() req: RequestWithUser,
-  ): Observable<{
-    data: string;
-    type: string;
-    id: string;
-    retry: number;
-  }> {
-    const { stream, lastStatus } =
-      this.metricsService.getCurrentStatus(scenarioId);
-
-    const formatEvent = (event: LoadTestCompletedEvent) => ({
-      data: JSON.stringify(event),
-      type: 'message',
-      id: event.runHistoryId,
-      retry: 10000, // Retry connection every 10 seconds if disconnected
-    });
-
-    if (stream) {
-      // If we have a current stream, send last known status first (if exists) then stream updates
-      const initialStatus$ = lastStatus ? of(lastStatus) : of();
-      return merge(initialStatus$, stream).pipe(map(formatEvent));
-    }
-
-    // If no current stream, just subscribe to future updates
-    return this.metricsService
-      .subscribeToLoadTestStatus(scenarioId)
-      .pipe(map(formatEvent));
   }
 
   @Sse('status/:userId')
