@@ -1,23 +1,20 @@
 import { InfluxDBService } from '@/load-test/services/influxdb.service';
 import { K6Service } from '@/load-test/services/k6.service';
-import {
-  ActiveTest,
-  LoadTestCompletedEvent,
-  LoadTestStartedEventInput,
-} from '@/load-test/types/load-test.types';
+import { ActiveTest } from '@/load-test/types/load-test.types';
 import { RunHistoryRepository } from '@/run-history/run-history.repository';
 import { ScenarioRepository } from '@/scenario/repositories/scenario.repository';
 import serverConfig from '@/shared/config';
+import { InjectRedis } from '@nestjs-modules/ioredis/dist/redis.decorators';
 import {
   BadRequestException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { RunHistory, RunHistoryStatus } from '@prisma/client';
 import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
+import Redis from 'ioredis';
 import * as path from 'path';
 import { Observable, Subject } from 'rxjs';
 
@@ -40,10 +37,10 @@ export class LoadTestsService {
 
   constructor(
     private readonly k6Service: K6Service,
-    private readonly eventEmitter: EventEmitter2,
     private readonly influxDBService: InfluxDBService,
     private readonly scenarioRepository: ScenarioRepository,
     private readonly runHistoryRepository: RunHistoryRepository,
+    @InjectRedis() private readonly redisClient: Redis,
   ) {
     void this.ensureTempDirectory();
   }
@@ -67,22 +64,29 @@ export class LoadTestsService {
     }
   }
 
-  private emitStatusUpdate(
+  private async emitStatusUpdate(
     userId: string,
     scenarioId: string,
     runHistoryId: string,
     status: RunHistoryStatus,
+    redis: boolean = true,
   ) {
+    const event = {
+      userId,
+      scenarioId,
+      runHistoryId,
+      status,
+      type: 'message',
+      id: `${scenarioId}:${runHistoryId}`,
+      retry: 3000,
+    };
+
+    if (redis) {
+      await this.redisClient.publish('load-test.status', JSON.stringify(event));
+    }
     const subject = this.usersSubjects.get(userId);
     if (subject) {
-      subject.next({
-        scenarioId,
-        runHistoryId,
-        status,
-        type: 'message',
-        id: `${scenarioId}:${runHistoryId}`,
-        retry: 3000,
-      });
+      subject.next(event);
     }
   }
 
@@ -116,12 +120,13 @@ export class LoadTestsService {
     return new Observable<ScenarioStatusUpdate>((observer) => {
       const subscription = subject!.subscribe(observer);
       if (isNewSubject) {
-        this.getRunningScenarios(userId).forEach((scenario) => {
-          this.emitStatusUpdate(
+        this.getRunningScenarios(userId).forEach(async (scenario) => {
+          await this.emitStatusUpdate(
             userId,
             scenario.scenarioId,
             scenario.runHistoryId,
             RunHistoryStatus.RUNNING,
+            false,
           );
         });
       }
@@ -130,17 +135,6 @@ export class LoadTestsService {
         this.usersSubjects.delete(userId);
       };
     });
-  }
-
-  private emitStartedEvent(event: LoadTestStartedEventInput) {
-    this.eventEmitter.emit('load-test.started', {
-      ...event,
-      status: event.status || RunHistoryStatus.RUNNING,
-    });
-  }
-
-  private emitCompletedEvent(event: LoadTestCompletedEvent) {
-    this.eventEmitter.emit('load-test.completed', event);
   }
 
   private async updateRunHistoryWithMetrics(
@@ -166,7 +160,6 @@ export class LoadTestsService {
       });
 
       // Emit completion event with metrics
-      this.emitCompletedEvent({ scenarioId, runHistoryId, status });
       this.emitStatusUpdate(userId, scenarioId, runHistoryId, status);
 
       return updated;
@@ -181,7 +174,7 @@ export class LoadTestsService {
       });
 
       // Emit completion event without metrics
-      this.emitCompletedEvent({ scenarioId, runHistoryId, status });
+      this.emitStatusUpdate(userId, scenarioId, runHistoryId, status);
 
       return updated;
     }
@@ -221,7 +214,6 @@ export class LoadTestsService {
     });
 
     // Emit started event
-    this.emitStartedEvent({ scenarioId, runHistoryId: runHistory.id });
     this.emitStatusUpdate(
       userId,
       scenarioId,
