@@ -18,11 +18,11 @@ export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
+    private readonly mailService: MailService,
     private readonly tokenService: TokenService,
     private readonly hashingService: HashingService,
     private readonly userRepository: UserRepository,
     @InjectRedis() private readonly redisClient: Redis,
-    private readonly mailService: MailService,
   ) {}
 
   async generateTokens(payload: TokenPayload) {

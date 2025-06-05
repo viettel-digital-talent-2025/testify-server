@@ -5,6 +5,7 @@ import {
   ResetPasswordDto,
   VerifyOtpDto,
 } from '@/auth/dtos/recovery-password.dto';
+import serverConfig from '@/shared/config';
 import { RequestWithCookies } from '@/shared/types/request.types';
 import {
   Body,
@@ -23,6 +24,10 @@ import { Response } from 'express';
 @ApiTags('api/v1/auth')
 @Controller('api/v1/auth')
 export class AuthController {
+  private readonly sameSite: 'lax' | 'strict' | 'none' =
+    serverConfig.NODE_ENV === 'production' ? 'none' : 'lax';
+  private readonly secure: boolean = serverConfig.NODE_ENV === 'production';
+
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
@@ -39,8 +44,8 @@ export class AuthController {
       httpOnly: true,
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: 'none',
-      secure: true,
+      sameSite: this.sameSite,
+      secure: this.secure,
     });
 
     return res.json({
@@ -64,8 +69,8 @@ export class AuthController {
       httpOnly: true,
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: 'none',
-      secure: true,
+      sameSite: this.sameSite,
+      secure: this.secure,
     });
 
     return res.json({
@@ -85,6 +90,7 @@ export class AuthController {
     if (!oldRefreshToken) {
       throw new UnauthorizedException('No refresh token found');
     }
+
     await this.authService.logout(oldRefreshToken);
     res.clearCookie('refreshToken');
 
@@ -111,8 +117,8 @@ export class AuthController {
       httpOnly: true,
       path: '/',
       maxAge: 7 * 24 * 60 * 60 * 1000,
-      sameSite: 'none',
-      secure: true,
+      sameSite: this.sameSite,
+      secure: this.secure,
     });
 
     return res.json({
