@@ -1,12 +1,18 @@
+import {
+  Logger,
+  UnprocessableEntityException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app.module';
-import { UnprocessableEntityException, ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
-import serverConfig from './shared/config';
+import { AppModule } from './app.module';
 import './shared/config';
+import serverConfig from './shared/config';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  const logger = new Logger('Bootstrap');
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -32,7 +38,19 @@ async function bootstrap() {
     }),
   );
   app.use(cookieParser());
-  app.enableCors({ credentials: true, origin: true });
-  await app.listen(serverConfig.PORT);
+
+  // Enable CORS for SSE
+  app.enableCors({
+    origin: serverConfig.frontend.FRONTEND_URL,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    credentials: true,
+    exposedHeaders: ['Content-Type', 'Authorization'],
+  });
+
+  const port = serverConfig.APP_PORT;
+  const host = serverConfig.APP_HOST;
+  await app.listen(port, host);
+  logger.log(`Application is running on: http://${host}:${port}`);
 }
 bootstrap();
