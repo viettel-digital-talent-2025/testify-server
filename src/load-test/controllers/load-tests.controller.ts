@@ -17,10 +17,8 @@ import { Role, RunHistory } from '@prisma/client';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { Roles } from 'src/auth/decorators/roles.decorator';
-import {
-  LoadTestsService,
-  ScenarioStatusUpdate,
-} from '../services/load-tests.service';
+import { LoadTestsService } from '../services/load-tests.service';
+import { LoadTestStatusEvent } from '../types/load-test.types';
 
 @ApiTags('api/v1/load-tests')
 @Controller('api/v1/load-tests')
@@ -49,7 +47,10 @@ export class LoadTestsController {
     @Param('scenarioId') scenarioId: string,
     @Req() req: RequestWithUser,
   ): Promise<RunHistory> {
-    return this.loadTestsService.runTest(scenarioId, req.user.userId);
+    return this.loadTestsService.runTest({
+      scenarioId,
+      userId: req.user.userId,
+    });
   }
 
   @Delete(':scenarioId/stop')
@@ -70,19 +71,24 @@ export class LoadTestsController {
     @Param('scenarioId') scenarioId: string,
     @Req() req: RequestWithUser,
   ): Promise<RunHistory> {
-    return await this.loadTestsService.stopTest(scenarioId, req.user.userId);
+    return await this.loadTestsService.stopTest({
+      scenarioId,
+      userId: req.user.userId,
+    });
   }
 
   @Sse('status/:userId')
-  loadUserTestStatus(@Param('userId') userId: string): Observable<{
-    data: string;
-    type: string;
-    id: string;
-    retry: number;
-  }> {
-    const { stream } = this.loadTestsService.getCurrentUserStatus(userId);
+  async loadUserTestStatus(@Param('userId') userId: string): Promise<
+    Observable<{
+      data: string;
+      type: string;
+      id: string;
+      retry: number;
+    }>
+  > {
+    const { stream } = this.loadTestsService.getCurrentUserStatus({ userId });
 
-    const formatEvent = (event: ScenarioStatusUpdate) => ({
+    const formatEvent = (event: LoadTestStatusEvent) => ({
       data: JSON.stringify(event),
       type: 'message',
       id: `${event.scenarioId}:${event.runHistoryId}`,
@@ -93,8 +99,8 @@ export class LoadTestsController {
       return stream.pipe(map(formatEvent));
     }
 
-    return this.loadTestsService
-      .subscribeToUserStatus(userId)
-      .pipe(map(formatEvent));
+    return (await this.loadTestsService.subscribeToUserStatus({ userId })).pipe(
+      map(formatEvent),
+    );
   }
 }
