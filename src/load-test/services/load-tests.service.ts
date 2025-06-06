@@ -1,135 +1,101 @@
-import { InfluxDBService } from '@/load-test/services/influxdb.service';
 import { K6Service } from '@/load-test/services/k6.service';
-import { ActiveTest } from '@/load-test/types/load-test.types';
-import { RunHistoryRepository } from '@/run-history/run-history.repository';
+import { MetricsService } from '@/load-test/services/metrics.service';
+import {
+  EmitStatusUpdateProps,
+  LoadTestStatusEvent,
+} from '@/load-test/types/load-test.types';
+import { RunHistoryMetricsRepository } from '@/run-history/repositories/run-history-metrics.repository';
+import { RunHistoryRepository } from '@/run-history/repositories/run-history.repository';
 import { ScenarioRepository } from '@/scenario/repositories/scenario.repository';
-import serverConfig from '@/shared/config';
+import { AppLoggerService } from '@/shared/services/app-logger.service';
 import { InjectRedis } from '@nestjs-modules/ioredis/dist/redis.decorators';
 import {
-  BadRequestException,
   Injectable,
-  Logger,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { RunHistory, RunHistoryStatus } from '@prisma/client';
-import { spawn } from 'child_process';
-import * as fs from 'fs/promises';
 import Redis from 'ioredis';
-import * as path from 'path';
 import { Observable, Subject } from 'rxjs';
-
-export interface ScenarioStatusUpdate {
-  scenarioId: string;
-  runHistoryId: string;
-  status: RunHistoryStatus;
-  type: string;
-  id: string;
-  retry: number;
-}
+import { K8sService } from './k8s.service';
 
 @Injectable()
 export class LoadTestsService {
-  private readonly logger = new Logger(LoadTestsService.name);
-  private readonly TEMP_DIR = path.join(process.cwd(), 'temp');
-  private readonly INFLUXDB_URL = serverConfig.loadTest.INFLUXDB_URL;
-  private activeScenarios: Map<string, ActiveTest> = new Map();
-  private usersSubjects = new Map<string, Subject<ScenarioStatusUpdate>>();
+  private usersSubjects = new Map<string, Subject<LoadTestStatusEvent>>();
 
   constructor(
+    private readonly logger: AppLoggerService,
     private readonly k6Service: K6Service,
-    private readonly influxDBService: InfluxDBService,
+    private readonly k8sService: K8sService,
+    private readonly metricsService: MetricsService,
     private readonly scenarioRepository: ScenarioRepository,
     private readonly runHistoryRepository: RunHistoryRepository,
+    private readonly runHistoryMetricsRepository: RunHistoryMetricsRepository,
     @InjectRedis() private readonly redisClient: Redis,
   ) {
-    void this.ensureTempDirectory();
+    this.logger.setContext(LoadTestsService.name);
   }
 
-  onModuleDestroy() {
-    this.activeScenarios.forEach((scenario) => {
-      scenario.process.kill();
-    });
-    this.usersSubjects.forEach((subject) => {
-      subject.complete();
-    });
-    this.usersSubjects.clear();
-    this.activeScenarios.clear();
-  }
-
-  private async ensureTempDirectory() {
-    try {
-      await fs.access(this.TEMP_DIR);
-    } catch {
-      await fs.mkdir(this.TEMP_DIR, { recursive: true });
-    }
-  }
-
-  private async emitStatusUpdate(
-    userId: string,
-    scenarioId: string,
-    runHistoryId: string,
-    status: RunHistoryStatus,
-    redis: boolean = true,
-  ) {
-    const event = {
-      userId,
-      scenarioId,
-      runHistoryId,
-      status,
+  // emit status update to client
+  private async emitStatusUpdate({ redis, ...props }: EmitStatusUpdateProps) {
+    const event: LoadTestStatusEvent = {
+      ...props,
       type: 'message',
-      id: `${scenarioId}:${runHistoryId}`,
+      id: `${props.runHistoryId}:${props.scenarioId}`,
       retry: 3000,
     };
 
     if (redis) {
       await this.redisClient.publish('load-test.status', JSON.stringify(event));
     }
-    const subject = this.usersSubjects.get(userId);
-    if (subject) {
-      subject.next(event);
-    }
+
+    this.usersSubjects.get(props.userId)?.next(event);
   }
 
-  private getRunningScenarios(userId: string) {
-    const runningScenarios = Array.from(this.activeScenarios.entries())
-      .filter(([key]) => key.endsWith(`:${userId}`))
-      .map(([key, value]) => ({
-        scenarioId: key.split(':')[0],
-        runHistoryId: value.runHistoryId,
-      }));
-    return runningScenarios;
-  }
-
-  getCurrentUserStatus(userId: string): {
-    stream: Observable<ScenarioStatusUpdate> | null;
+  // get current user status that sse connection is open or not
+  getCurrentUserStatus({ userId }: { userId: string }): {
+    stream: Observable<LoadTestStatusEvent> | null;
   } {
-    const subject = this.usersSubjects.get(userId);
     return {
-      stream: subject?.asObservable() || null,
+      stream: this.usersSubjects.get(userId)?.asObservable() || null,
     };
   }
 
-  subscribeToUserStatus(userId: string): Observable<ScenarioStatusUpdate> {
+  //  create a new sse connection for a user if not exists
+  async subscribeToUserStatus({
+    userId,
+  }: {
+    userId: string;
+  }): Promise<Observable<LoadTestStatusEvent>> {
     let subject = this.usersSubjects.get(userId);
     const isNewSubject = !subject;
     if (isNewSubject) {
-      subject = new Subject<ScenarioStatusUpdate>();
+      subject = new Subject<LoadTestStatusEvent>();
       this.usersSubjects.set(userId, subject);
     }
 
-    return new Observable<ScenarioStatusUpdate>((observer) => {
+    return new Observable<LoadTestStatusEvent>((observer) => {
       const subscription = subject!.subscribe(observer);
+
       if (isNewSubject) {
-        this.getRunningScenarios(userId).forEach(async (scenario) => {
-          await this.emitStatusUpdate(
-            userId,
-            scenario.scenarioId,
-            scenario.runHistoryId,
-            RunHistoryStatus.RUNNING,
-            false,
-          );
-        });
+        this.runHistoryRepository
+          .findRunningJobsByUserId({ userId })
+          .then((runningJobs) => {
+            void Promise.all(
+              runningJobs.map((job) =>
+                this.emitStatusUpdate({
+                  userId,
+                  runHistoryId: job.id,
+                  scenarioId: job.scenarioId,
+                  status: job.status,
+                  runAt: job.runAt!,
+                  redis: false,
+                }),
+              ),
+            );
+          });
       }
+
       return () => {
         subscription.unsubscribe();
         this.usersSubjects.delete(userId);
@@ -137,241 +103,298 @@ export class LoadTestsService {
     });
   }
 
-  private async updateRunHistoryWithMetrics(
-    userId: string,
-    runHistoryId: string,
-    scenarioId: string,
-    status: RunHistoryStatus,
-  ): Promise<RunHistory> {
+  private async updateRunHistoryWithMetrics({
+    runHistoryId,
+    scenarioId,
+    userId,
+    status,
+  }: {
+    runHistoryId: string;
+    scenarioId: string;
+    userId: string;
+    status: RunHistoryStatus;
+  }): Promise<RunHistory> {
+    const runHistory = await this.runHistoryRepository.findUnique(runHistoryId);
+    if (!runHistory) throw new NotFoundException('Run history not found');
+
+    const { flows } = runHistory.scenario;
+    const { runAt, endAt } = runHistory;
+
+    if (!runAt || !endAt) {
+      this.logger.error('Failed to calculate interval');
+      throw new InternalServerErrorException('Failed to calculate interval');
+    }
+
+    const interval = (endAt.getTime() - runAt.getTime()) / 1000;
+    const runAtString = runAt.toISOString();
+    const endAtString = endAt.toISOString();
+
     try {
-      // Get metrics from InfluxDB
-      const metrics =
-        await this.influxDBService.getMetricsFromInfluxDB(scenarioId);
+      const metricsPromises = [
+        ...flows.flatMap((flow) =>
+          flow.steps.map(async (step) => {
+            const { metrics } = await this.metricsService.getMetrics({
+              runHistoryId,
+              scenarioId,
+              userId,
+              runAt: runAtString,
+              endAt: endAtString,
+              tags: { flow_id: flow.id, step_id: step.id },
+            });
 
-      // Update run history with metrics
-      const { successRate, avgResponseTime, errorRate, requestsPerSecond } =
-        metrics;
-      const updated = await this.runHistoryRepository.update(runHistoryId, {
-        status,
-        successRate,
-        avgResponseTime,
-        errorRate,
-        requestsPerSecond,
-      });
+            return this.runHistoryMetricsRepository.create({
+              runHistoryId,
+              flowId: flow.id,
+              stepId: step.id,
+              p95Latency: metrics.latency[0].p95,
+              avgLatency: metrics.latency[0].avg,
+              throughput: (metrics.throughput[0].value ?? 0) / interval,
+              errorRate: metrics.errorRate[0].value,
+            });
+          }),
+        ),
+        (async () => {
+          const { metrics } = await this.metricsService.getMetrics({
+            runHistoryId,
+            scenarioId,
+            userId,
+            runAt: runAtString,
+            endAt: endAtString,
+          });
 
-      // Emit completion event with metrics
-      this.emitStatusUpdate(userId, scenarioId, runHistoryId, status);
+          return this.runHistoryRepository.update(runHistoryId, {
+            status,
+            p95Latency: metrics.latency[0].p95,
+            avgLatency: metrics.latency[0].avg,
+            throughput: (metrics.throughput[0].value ?? 0) / interval,
+            errorRate: metrics.errorRate[0].value,
+          });
+        })(),
+      ];
 
-      return updated;
-    } catch (error: unknown) {
+      const results = await Promise.all(metricsPromises);
+      return results[results.length - 1] as RunHistory;
+    } catch (error) {
       this.logger.error(
         `Error updating run history with metrics for scenario ${scenarioId}:`,
         error,
       );
-      // Still update status and emit event even if metrics collection fails
-      const updated = await this.runHistoryRepository.update(runHistoryId, {
-        status,
-      });
-
-      // Emit completion event without metrics
-      this.emitStatusUpdate(userId, scenarioId, runHistoryId, status);
-
-      return updated;
+      throw new InternalServerErrorException(
+        `Error updating run history with metrics for scenario ${scenarioId}`,
+      );
     }
   }
 
-  async runTest(scenarioId: string, userId: string): Promise<RunHistory> {
-    const isRunning = this.activeScenarios.has(`${scenarioId}:${userId}`);
-    if (isRunning) {
-      const runHistory =
-        await this.runHistoryRepository.findRunningRunHistory(scenarioId);
-
-      if (runHistory) {
-        return runHistory;
-      }
-
-      throw new BadRequestException('Scenario is already running');
+  // run a new test
+  async runTest({
+    scenarioId,
+    userId,
+  }: {
+    scenarioId: string;
+    userId: string;
+  }): Promise<RunHistory> {
+    const runHistories =
+      await this.runHistoryRepository.findRunningJobsByScenarioId({
+        scenarioId,
+      });
+    if (runHistories.length > 0) {
+      return runHistories[0];
     }
 
-    const scenario = await this.scenarioRepository.findOne(scenarioId, userId);
+    const scenario = await this.scenarioRepository.findOne({
+      id: scenarioId,
+      userId,
+    });
     if (!scenario) {
       throw new NotFoundException('Scenario not found');
     }
 
-    const typedScenario = scenario;
-
-    // Create run history record with RUNNING status
+    // create run history
+    let runAt: Date;
     const runHistory = await this.runHistoryRepository.create({
       scenarioId,
-      runAt: new Date(),
-      vus: typedScenario.vus,
-      duration: typedScenario.duration,
       status: RunHistoryStatus.RUNNING,
-      successRate: 0,
-      avgResponseTime: 0,
-      errorRate: 0,
-      requestsPerSecond: 0,
     });
-
-    // Emit started event
-    this.emitStatusUpdate(
-      userId,
-      scenarioId,
-      runHistory.id,
-      RunHistoryStatus.RUNNING,
-    );
 
     try {
       // Generate and write k6 script with scenario ID
-      const script = this.k6Service.generateK6Script(typedScenario, scenarioId);
-      const scriptPath = path.join(this.TEMP_DIR, `${scenarioId}.js`);
-      await fs.writeFile(scriptPath, script);
-
-      // Prepare Docker command for k6
-      const dockerArgs = [
-        'run',
-        '--rm',
-        '-v',
-        `${this.TEMP_DIR}:/scripts`,
-        '-e',
-        'K6_INFLUXDB_TAGS_AS_FIELDS=flow_id,step_id,scenario_id',
-        '-e',
-        'K6_INFLUXDB_TAGS=flow_id,step_id,scenario_id',
-        'grafana/k6',
-        'run',
-        `/scripts/${scenarioId}.js`,
-        '--out',
-        `influxdb=${this.INFLUXDB_URL}`,
-      ];
-
-      // Spawn Docker process
-      const dockerProcess = spawn('docker', dockerArgs, {
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-
-      // Store process in activeScenarios
-      this.activeScenarios.set(`${scenarioId}:${userId}`, {
-        process: dockerProcess,
+      const script = this.k6Service.generateK6Script({
+        scenario,
         runHistoryId: runHistory.id,
       });
 
-      // Handle stdout
-      dockerProcess.stdout.on('data', async (data: Buffer) => {
-        const log = data.toString().trim();
-        this.logger.log(`[k6:${scenarioId}] ${log}`);
-
-        const progressMatch = log.match(/\[\s*(\d+)%\s*\]/);
-        if (progressMatch) {
-          const progressPercent = parseInt(progressMatch[1], 10);
-          await this.runHistoryRepository.update(runHistory.id, {
-            progress: progressPercent,
-          });
-        }
+      // create k6 job
+      await this.k8sService.createK6Job({
+        runHistoryId: runHistory.id,
+        scenarioId,
+        userId,
+        script,
       });
 
-      // Handle stderr
-      dockerProcess.stderr.on('data', (data: Buffer) => {
-        this.logger.error(`[k6:${scenarioId}] ${data.toString().trim()}`);
-      });
-
-      // Handle process completion
-      dockerProcess.on(
-        'close',
-        (code: number | null, signal: string | null) => {
-          const wasKilled = signal === 'SIGTERM';
-
-          const finalStatus = wasKilled
-            ? RunHistoryStatus.ABORTED
-            : code === 0
-              ? RunHistoryStatus.SUCCESS
-              : RunHistoryStatus.FAILED;
-
-          // Use void to handle the Promise
-          void (async () => {
-            try {
-              // Update run history with metrics and status
-              await this.updateRunHistoryWithMetrics(
-                userId,
-                runHistory.id,
-                scenarioId,
-                finalStatus,
-              );
-            } catch (error: unknown) {
-              this.logger.error(
-                `Error in test completion handler for scenario ${scenarioId}:`,
-                error,
-              );
-            }
-
-            // Clean up
-            this.activeScenarios.delete(`${scenarioId}:${userId}`);
-          })();
-        },
-      );
-
-      // Return immediately
-      return runHistory;
-    } catch (error: unknown) {
-      this.logger.error(
-        `Error starting k6 test for scenario ${scenarioId}:`,
-        error,
-      );
-
+      // get run at from influxdb
+      runAt = await this.metricsService.getRunAt(runHistory.id);
       await this.runHistoryRepository.update(runHistory.id, {
-        status: RunHistoryStatus.FAILED,
+        status: RunHistoryStatus.RUNNING,
+        runAt,
       });
 
-      throw error;
+      // emit started event to client
+      setImmediate(() => {
+        void this.emitStatusUpdate({
+          runHistoryId: runHistory.id,
+          scenarioId,
+          userId,
+          status: RunHistoryStatus.RUNNING,
+          runAt,
+        });
+      });
+
+      // stream k6 logs
+      setImmediate(async () => {
+        const stream = await this.k8sService.streamK6Logs(
+          runHistory.id,
+          async (log) => {
+            const progressMatch = log.match(/\[\s*(\d+)%\s*\]/);
+            if (progressMatch) {
+              const progress = parseInt(progressMatch[1], 10);
+              await this.runHistoryRepository.update(runHistory.id, {
+                progress,
+              });
+              if (stream && progress === 100) {
+                stream.destroy();
+              }
+            }
+          },
+        );
+      });
+
+      // watch job completion
+      setImmediate(() => {
+        void this.k8sService.watchJobCompletion(
+          runHistory.id,
+          async (status) => {
+            // update run history with status and end at
+            const endAt = await this.metricsService.getEndAt(runHistory.id);
+            await this.runHistoryRepository.update(runHistory.id, {
+              status,
+              endAt,
+            });
+
+            // update run history with metrics
+            await this.updateRunHistoryWithMetrics({
+              runHistoryId: runHistory.id,
+              scenarioId,
+              userId,
+              status,
+            });
+
+            // emit status update to client
+            setImmediate(() => {
+              void this.emitStatusUpdate({
+                runHistoryId: runHistory.id,
+                scenarioId,
+                userId,
+                status,
+                runAt,
+              });
+            });
+          },
+        );
+      });
+
+      return {
+        ...runHistory,
+        runAt,
+      };
+    } catch (error: unknown) {
+      const status = RunHistoryStatus.FAILED;
+
+      // delete k6 job
+      await this.k8sService.cleanUpK6Job(runHistory.id);
+
+      // get run at and end at
+      const [runAt, endAt] = await Promise.all([
+        this.metricsService.getRunAt(runHistory.id),
+        this.metricsService.getEndAt(runHistory.id),
+      ]);
+
+      // update run history with status and end at
+      await this.runHistoryRepository.update(runHistory.id, {
+        status,
+        runAt,
+        endAt,
+      });
+
+      setImmediate(() => {
+        void this.emitStatusUpdate({
+          runHistoryId: runHistory.id,
+          scenarioId,
+          userId,
+          status,
+          runAt,
+        });
+      });
+
+      this.logger.error(
+        `Error starting k6 test for scenario ${scenarioId}`,
+        error instanceof Error ? error.message : 'Unknown error',
+      );
+      throw new InternalServerErrorException(
+        `Error starting k6 test for scenario ${scenarioId}`,
+      );
     }
   }
 
-  async stopTest(scenarioId: string, userId: string): Promise<RunHistory> {
-    const test = this.activeScenarios.get(`${scenarioId}:${userId}`);
+  async stopTest({
+    scenarioId,
+    userId,
+  }: {
+    scenarioId: string;
+    userId: string;
+  }): Promise<RunHistory> {
+    const runHistories =
+      await this.runHistoryRepository.findRunningJobsByScenarioId({
+        scenarioId,
+      });
 
-    if (!test) {
-      const runHistories =
-        await this.runHistoryRepository.findRunningRunHistories(scenarioId);
+    if (!runHistories) {
+      throw new NotFoundException('Run history not found');
+    }
 
-      if (runHistories.length === 0) {
-        this.logger.warn(
-          `No active test or running scenario found for ${scenarioId}`,
-        );
-        throw new NotFoundException('Scenario is not running');
-      }
+    try {
+      const status = RunHistoryStatus.ABORTED;
 
-      const updatedHistories = await Promise.all(
-        runHistories.map(async (run) => {
-          return await this.runHistoryRepository.update(run.id, {
-            status: RunHistoryStatus.ABORTED,
+      await Promise.all(
+        runHistories.map(async (runHistory) => {
+          const [_, endAt] = await Promise.all([
+            this.k8sService.cleanUpK6Job(runHistory.id),
+            this.metricsService.getEndAt(runHistory.id),
+          ]);
+
+          await this.runHistoryRepository.update(runHistory.id, {
+            status,
+            endAt,
+          });
+
+          await this.emitStatusUpdate({
+            runHistoryId: runHistory.id,
+            scenarioId,
+            userId,
+            status,
+            runAt: runHistory.runAt!,
           });
         }),
       );
 
-      return updatedHistories[0];
-    }
-
-    try {
-      // Kill the Docker process
-      test.process.kill();
-
-      // Update run history with metrics and ABORTED status
-      const updated = await this.updateRunHistoryWithMetrics(
-        userId,
-        test.runHistoryId,
-        scenarioId,
-        RunHistoryStatus.ABORTED,
-      );
-
-      // Clean up
-      this.activeScenarios.delete(`${scenarioId}:${userId}`);
-
-      return updated;
-    } catch (error: unknown) {
+      return runHistories[0];
+    } catch (error) {
       this.logger.error(
-        `Error stopping k6 test for scenario ${scenarioId}:`,
-        error,
+        `Error stopping k6 test for run history ${scenarioId}:`,
+        error instanceof Error ? error.message : 'Unknown error',
       );
-      throw error;
+      throw new InternalServerErrorException(
+        `Error stopping k6 test for run history ${scenarioId}`,
+      );
     }
   }
 }
