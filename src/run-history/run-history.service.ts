@@ -1,12 +1,11 @@
 import {
-  RunHistoryQueryDto,
+  RunHistoryQueryRequestDto,
   RunHistoryWhereInput,
-  RunHistoryWhereUniqueInput,
-  RunHistoryWithMetrics,
-} from '@/run-history/run-history.dto';
-import { RunHistoryRepository } from '@/run-history/run-history.repository';
+  RunHistoryWithScenarioName,
+} from '@/run-history/dtos/run-history.dto';
+import { RunHistoryRepository } from '@/run-history/repositories/run-history.repository';
 import { AppLoggerService } from '@/shared/services/app-logger.service';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { RunHistoryStatus } from '@prisma/client';
 
 @Injectable()
@@ -18,11 +17,11 @@ export class RunHistoryService {
     this.logger.setContext(RunHistoryService.name);
   }
 
-  isValidDate(value: any): value is Date {
+  private isValidDate(value: any): value is Date {
     return value instanceof Date && !isNaN(value.getTime());
   }
 
-  parseDate(input: unknown): Date | null {
+  private parseDate(input: unknown): Date | null {
     if (typeof input === 'string') {
       const date = new Date(input);
       return isNaN(date.getTime()) ? null : date;
@@ -30,7 +29,7 @@ export class RunHistoryService {
     return null;
   }
 
-  private parseStatus(
+  private parseStatuses(
     status: string | string[] | undefined,
   ): RunHistoryStatus[] | undefined {
     if (!status || status === '' || status === 'null') return undefined;
@@ -45,22 +44,40 @@ export class RunHistoryService {
     return validStatuses.length > 0 ? validStatuses : undefined;
   }
 
-  buildWhere(query: RunHistoryQueryDto, scenarioId: string) {
+  buildWhere(query: RunHistoryQueryRequestDto, scenarioId: string) {
     const where: RunHistoryWhereInput = {};
+
     if (scenarioId && scenarioId !== 'undefined' && scenarioId !== 'null') {
       where.scenarioId = scenarioId;
     }
 
-    if (query.search) {
-      where.scenario = {
-        name: {
-          contains: query.search,
-          mode: 'insensitive',
-        },
-      };
+    if (query.search && query.search !== 'undefined') {
+      where.OR = [];
+      const runAt = this.parseDate(query.search);
+      if (this.isValidDate(runAt)) {
+        const startOfDay = new Date(runAt);
+        startOfDay.setHours(0, 0, 0, 0);
+
+        const endOfDay = new Date(runAt);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        where.OR.push({ runAt: { gte: startOfDay, lte: endOfDay } });
+      }
+
+      where.OR.push({ id: { contains: query.search, mode: 'insensitive' } });
+
+      const numSearch = Number(query.search);
+      if (!isNaN(numSearch)) {
+        where.OR.push(
+          { avgLatency: { equals: numSearch } },
+          { p95Latency: { equals: numSearch } },
+          { throughput: { equals: numSearch } },
+          { errorRate: { equals: numSearch } },
+        );
+      }
     }
 
-    const statuses = this.parseStatus(query.status);
+    const statuses = this.parseStatuses(query.status);
     if (statuses && statuses.length > 0) {
       where.status = { in: statuses };
     }
@@ -76,10 +93,11 @@ export class RunHistoryService {
         where.runAt.lte = endTime;
       }
     }
+
     return where;
   }
 
-  buildPaging(query: RunHistoryQueryDto) {
+  buildPaging(query: RunHistoryQueryRequestDto) {
     const { skip, take } = query;
     const orderBy =
       query.orderBy && query.order
@@ -88,22 +106,12 @@ export class RunHistoryService {
     return { skip, take, orderBy };
   }
 
-  async findOne(
-    where: RunHistoryWhereUniqueInput,
-  ): Promise<RunHistoryWithMetrics> {
-    const runHistory = await this.repository.findUnique(where);
-    if (!runHistory) {
-      throw new NotFoundException(`Run history not found with id: ${where.id}`);
-    }
-    return runHistory;
-  }
-
   async findAll(params: {
     where?: RunHistoryWhereInput;
     skip?: number;
     take?: number;
     orderBy?: { [key: string]: 'asc' | 'desc' };
-  }): Promise<{ data: RunHistoryWithMetrics[]; total: number }> {
+  }): Promise<{ data: RunHistoryWithScenarioName[]; total: number }> {
     try {
       const [data, total] = await Promise.all([
         this.repository.findMany({ ...params, where: params.where }),
@@ -114,25 +122,6 @@ export class RunHistoryService {
     } catch (error) {
       this.logger.error(
         `Failed to find run histories: ${error instanceof Error ? error.message : 'Unknown error'}`,
-      );
-      throw error;
-    }
-  }
-
-  async delete(
-    where: RunHistoryWhereUniqueInput,
-  ): Promise<RunHistoryWithMetrics> {
-    try {
-      // Check if exists
-      await this.findOne(where);
-
-      return await this.repository.delete(where);
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      this.logger.error(
-        `Failed to delete run history: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
       throw error;
     }
