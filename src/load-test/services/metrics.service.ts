@@ -1,6 +1,11 @@
-import { MetricsQuery, MetricsResponse } from '@/load-test/types/metrics.types';
 import { ScenarioRepository } from '@/scenario/repositories/scenario.repository';
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { MetricsQuery } from '../types/metrics.types';
 import { InfluxDBService } from './influxdb.service';
 
 @Injectable()
@@ -20,25 +25,35 @@ export class MetricsService {
     return typeof value === 'string';
   }
 
-  async getMetrics(query: MetricsQuery): Promise<MetricsResponse> {
+  async getRunAt(runHistoryId: string) {
+    return this.influxDBService.getRunAt(runHistoryId);
+  }
+
+  async getEndAt(runHistoryId: string) {
+    return this.influxDBService.getEndAt(runHistoryId);
+  }
+
+  async getMetrics(query: MetricsQuery) {
     try {
-      const {
-        userId,
-        scenarioId,
+      const { runHistoryId, scenarioId, userId, interval, runAt, endAt, tags } =
+        query;
+
+      console.log(
         runHistoryId,
-        duration = '1m',
-        interval = '1s',
+        scenarioId,
+        userId,
+        interval,
         runAt,
         endAt,
         tags,
-      } = query;
+      );
 
       // Check if scenario exists
-      const scenario = await this.scenarioRepository.findOne(
-        scenarioId,
+      const scenario = await this.scenarioRepository.findOne({
+        id: scenarioId,
         userId,
         runHistoryId,
-      );
+      });
 
       if (!scenario) {
         throw new NotFoundException(`Scenario ${scenarioId} not found`);
@@ -54,8 +69,10 @@ export class MetricsService {
 
       // Query InfluxDB for metrics
       const metrics = await this.influxDBService.queryMetrics({
-        scenarioId,
-        duration: duration.toString(),
+        runHistoryId:
+          runHistoryId === 'undefined'
+            ? scenario.runHistories[0]?.id
+            : runHistoryId,
         interval,
         metrics: ['http_req_duration', 'http_reqs', 'errors'],
         tags: safeTags,
@@ -71,19 +88,18 @@ export class MetricsService {
 
       const throughputPoints = metrics[1].map((m) => ({
         timestamp: m.time.toISOString(),
-        value: m.value,
+        value: (m.value ?? 0) / 5,
       }));
 
       const errorRatePoints = metrics[2].map((m) => ({
         timestamp: m.time.toISOString(),
-        value: m.value,
+        value: m.value ?? 0,
       }));
 
       return {
-        scenarioId,
         runHistoryId,
+        scenarioId,
         scenarioName: scenario.name,
-        duration,
         interval,
         tags: safeTags,
         metrics: {
@@ -91,22 +107,19 @@ export class MetricsService {
           throughput: throughputPoints,
           errorRate: errorRatePoints,
         },
-        lastUpdated: new Date().toISOString(),
+        status: scenario.runHistories[0].status,
         progress: scenario.runHistories[0].progress,
-        runAt: scenario.runHistories[0].runAt.toISOString(),
+        lastUpdated: new Date().toISOString(),
+        runAt: scenario.runHistories[0].runAt?.toISOString() || null,
         endAt: scenario.runHistories[0].endAt?.toISOString() || null,
       };
-    } catch (error: unknown) {
+    } catch (error) {
       this.logger.error(
         `Failed to get realtime metrics for scenario ${query.scenarioId}:`,
         error instanceof Error ? error.message : 'Unknown error',
       );
 
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-
-      throw new NotFoundException(
+      throw new InternalServerErrorException(
         `Failed to get realtime metrics for scenario ${query.scenarioId}`,
       );
     }
