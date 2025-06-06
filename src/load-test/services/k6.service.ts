@@ -7,7 +7,13 @@ import { ApiConfig, WebConfig } from '../types/config.types';
 export class K6Service {
   constructor() {}
 
-  generateK6Script(scenario: ScenarioDto, scenarioId: string): string {
+  generateK6Script({
+    scenario,
+    runHistoryId,
+  }: {
+    scenario: ScenarioDto;
+    runHistoryId: string;
+  }): string {
     // Generate flow functions with global tags
     const flowFunctions = scenario.flows
       .map((flow) => {
@@ -130,10 +136,8 @@ export class K6Service {
         vus: ${scenario.vus},
         duration: '${scenario.duration}s',
         tags: {
-          scenario_id: "${scenarioId}",
-          scenario_name: "${scenario.name}",
-          test_type: "${scenario.type}",
-          flow_type: "${scenario.flowType}",
+          run_history_id: "${runHistoryId}",
+          scenario_id: "${scenario.id}",
           flow_id: "",
           step_id: "",
         },
@@ -142,7 +146,7 @@ export class K6Service {
           'request_duration': ['p(95)<500'],
         }
       };
-
+  
       ${flowFunctions}
       
       ${weightedRandomSelection}
