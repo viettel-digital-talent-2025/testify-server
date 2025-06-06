@@ -1,24 +1,10 @@
 import {
-  RunHistoryListResponseDto,
-  RunHistoryQueryDto,
-  RunHistoryWithMetrics,
-  RunHistoryWithMetricsDto,
-} from '@/run-history/run-history.dto';
+  RunHistoryQueryRequestDto,
+  RunHistoryWithScenarioName,
+} from '@/run-history/dtos/run-history.dto';
 import { RunHistoryService } from '@/run-history/run-history.service';
-import {
-  Controller,
-  Get,
-  NotFoundException,
-  Param,
-  Query,
-} from '@nestjs/common';
-import {
-  ApiOperation,
-  ApiParam,
-  ApiQuery,
-  ApiResponse,
-  ApiTags,
-} from '@nestjs/swagger';
+import { Controller, Get, Param, Query } from '@nestjs/common';
+import { ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { RunHistoryStatus } from '@prisma/client';
 
 @ApiTags('Run History')
@@ -54,11 +40,10 @@ export class RunHistoryController {
     required: false,
     enum: [
       'runAt',
-      'vus',
-      'duration',
-      'successRate',
-      'avgResponseTime',
-      'requestsPerSecond',
+      'avgLatency',
+      'p95Latency',
+      'throughput',
+      'errorRate',
       'createdAt',
     ],
     description: 'Field to order by',
@@ -88,38 +73,12 @@ export class RunHistoryController {
     isArray: true,
     description: 'Filter by status (can be multiple, comma-separated)',
   })
-  @ApiResponse({
-    status: 200,
-    description: 'List of run history records',
-    type: RunHistoryListResponseDto,
-  })
   async findAll(
     @Param('scenarioId') scenarioId: string,
-    @Query() query: RunHistoryQueryDto,
-  ): Promise<{ data: RunHistoryWithMetrics[]; total: number }> {
+    @Query() query: RunHistoryQueryRequestDto,
+  ): Promise<{ data: RunHistoryWithScenarioName[]; total: number }> {
     const where = this.service.buildWhere(query, scenarioId);
     const paging = this.service.buildPaging(query);
-
     return this.service.findAll({ where, ...paging });
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get a run history record by ID' })
-  @ApiParam({ name: 'id', description: 'Run history ID' })
-  @ApiResponse({
-    status: 200,
-    description: 'Run history found',
-    type: RunHistoryWithMetricsDto,
-  })
-  @ApiResponse({ status: 404, description: 'Run history not found' })
-  async findOne(@Param('id') id: string): Promise<RunHistoryWithMetrics> {
-    try {
-      return await this.service.findOne({ id });
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      throw new NotFoundException(`Run history not found with id: ${id}`);
-    }
   }
 }
