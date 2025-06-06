@@ -1,4 +1,15 @@
-import { ApiProperty } from '@nestjs/swagger';
+export interface MetricsQuery {
+  runHistoryId?: string;
+  scenarioId: string;
+  userId: string;
+  interval?: string; // e.g., "5s", "1m"
+  runAt?: string;
+  endAt?: string;
+  tags?: {
+    flow_id?: string;
+    step_id?: string;
+  };
+}
 
 export interface TimeSeriesPoint {
   timestamp: string;
@@ -17,24 +28,18 @@ export interface Metrics {
   errorRate: TimeSeriesPoint[];
 }
 
-export interface MetricsQuery {
-  userId: string;
-  scenarioId: string;
+export interface MetricsResponse {
   runHistoryId?: string;
-  duration?: string;
-  interval?: string; // e.g., "5s", "1m"
-  runAt?: string;
-  endAt?: string;
+  scenarioId: string;
+  scenarioName: string;
+  interval?: string;
   tags?: {
     flow_id?: string;
     step_id?: string;
   };
-}
-
-export class MetricsResponse {
-  @ApiProperty({ description: 'Metrics data' })
-  data: any;
-
-  @ApiProperty({ description: 'Query metadata' })
-  metadata: any;
+  metrics: Metrics;
+  progress: number;
+  lastUpdated: string;
+  runAt: string | null;
+  endAt: string | null;
 }
