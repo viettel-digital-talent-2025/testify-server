@@ -1,11 +1,14 @@
 import {
   InfluxQueryResult,
-  MetricData,
   MetricsQueryOptions,
-  TestMetrics,
 } from '@/load-test/types/influxdb.types';
 import serverConfig from '@/shared/config';
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  OnModuleInit,
+} from '@nestjs/common';
 import * as Influx from 'influx';
 
 @Injectable()
@@ -40,36 +43,37 @@ export class InfluxDBService implements OnModuleInit {
           {
             measurement: 'http_req_duration',
             fields: { value: Influx.FieldType.FLOAT },
-            tags: ['test_id', 'scenario_id', 'flow_id', 'step_id'],
+            tags: ['run_history_id', 'scenario_id', 'flow_id', 'step_id'],
           },
           {
             measurement: 'http_req_failed',
             fields: { value: Influx.FieldType.FLOAT },
-            tags: ['test_id', 'scenario_id', 'flow_id', 'step_id'],
+            tags: ['run_history_id', 'scenario_id', 'flow_id', 'step_id'],
           },
           {
             measurement: 'http_reqs',
             fields: { value: Influx.FieldType.FLOAT },
-            tags: ['test_id', 'scenario_id', 'flow_id', 'step_id'],
+            tags: ['run_history_id', 'scenario_id', 'flow_id', 'step_id'],
           },
         ],
       });
 
       this.logger.log(`InfluxDB client initialized with URL: ${url}`);
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(
-        `Failed to initialize InfluxDB client: ${errorMessage}`,
-      );
       this.client = undefined;
+      this.logger.error('Failed to initialize InfluxDB client', error);
+      throw new InternalServerErrorException(
+        'Failed to initialize InfluxDB client',
+      );
     }
   }
 
   async onModuleInit() {
     if (!this.client) {
       this.logger.error('InfluxDB client not initialized');
-      return;
+      return new InternalServerErrorException(
+        'InfluxDB client not initialized',
+      );
     }
 
     try {
@@ -80,40 +84,8 @@ export class InfluxDBService implements OnModuleInit {
       }
       this.logger.log('InfluxDB connection established and verified');
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(
-        `Failed to verify InfluxDB connection: ${errorMessage}`,
-      );
+      this.logger.error('Failed to verify InfluxDB connection', error);
       this.client = undefined;
-    }
-  }
-
-  async writeMetric(data: MetricData): Promise<void> {
-    if (!this.client) {
-      throw new Error('InfluxDB client not initialized');
-    }
-
-    try {
-      const point = {
-        measurement: data.measurement,
-        fields: {
-          value: data.value,
-        },
-        tags: data.tags || {},
-        timestamp: data.timestamp || new Date(),
-      };
-
-      await this.client.writePoints([point]);
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to write metric: ${errorMessage}`, {
-        measurement: data.measurement,
-        tags: data.tags,
-        error: error instanceof Error ? error.stack : undefined,
-      });
-      throw error;
     }
   }
 
@@ -124,11 +96,10 @@ export class InfluxDBService implements OnModuleInit {
       const milliseconds = Math.floor(nanoTime / 1000000);
       return new Date(milliseconds);
     } catch (error) {
-      this.logger.error(
-        `Failed to convert InfluxDB timestamp: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      this.logger.error('Failed to convert InfluxDB timestamp', error);
+      throw new InternalServerErrorException(
+        'Failed to convert InfluxDB timestamp',
       );
-      // Return current date as fallback
-      return new Date();
     }
   }
 
@@ -136,112 +107,15 @@ export class InfluxDBService implements OnModuleInit {
     query: string,
   ): Promise<T[]> {
     if (!this.client) {
-      throw new Error('InfluxDB client not initialized');
+      throw new InternalServerErrorException('InfluxDB client not initialized');
     }
 
     try {
       const results = await this.client.query(query);
       return results as unknown as T[];
     } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to execute query: ${errorMessage}`);
-      throw error;
-    }
-  }
-
-  async getMetricsFromInfluxDB(scenarioId: string): Promise<TestMetrics> {
-    if (!this.client) {
-      throw new Error('InfluxDB client not initialized');
-    }
-
-    try {
-      // Get the test start time from the first measurement
-      const startTimeQuery = `
-        SELECT first(value) as value, time 
-        FROM http_req_duration 
-        WHERE scenario_id = '${scenarioId}' 
-        AND time > now() - 1h 
-        GROUP BY * 
-        LIMIT 1
-      `;
-
-      const startTimeResult =
-        await this.query<InfluxQueryResult>(startTimeQuery);
-      if (!startTimeResult || startTimeResult.length === 0) {
-        throw new Error('No data found for the given scenario ID');
-      }
-
-      const startTime = this.convertNanoDateToDate(startTimeResult[0].time);
-      const endTime = new Date();
-
-      // Format time range for InfluxDB query
-      const timeRange = `time >= '${startTime.toISOString()}' AND time <= '${endTime.toISOString()}'`;
-
-      // Query for average response time (p95)
-      const avgResponseTimeQuery = `
-        SELECT percentile(value, 95) as value 
-        FROM http_req_duration 
-        WHERE scenario_id = '${scenarioId}' 
-        AND ${timeRange}
-        GROUP BY time(1m)
-        FILL(null)
-      `;
-
-      // Query for error rate (total failed requests / total requests)
-      const errorRateQuery = `
-        SELECT mean(value) as value 
-        FROM http_req_failed 
-        WHERE scenario_id = '${scenarioId}' 
-        AND ${timeRange}
-        GROUP BY time(1m)
-        FILL(null)
-      `;
-
-      // Query for requests per second using a different approach
-      const requestsPerSecondQuery = `
-        SELECT count(value) as value 
-        FROM http_reqs 
-        WHERE scenario_id = '${scenarioId}' 
-        AND ${timeRange}
-        GROUP BY time(1s)
-        FILL(null)
-      `;
-
-      const [avgResponseTimeResult, errorRateResult, requestsPerSecondResult] =
-        await Promise.all([
-          this.query<InfluxQueryResult>(avgResponseTimeQuery),
-          this.query<InfluxQueryResult>(errorRateQuery),
-          this.query<InfluxQueryResult>(requestsPerSecondQuery),
-        ]);
-
-      // Calculate average values from the time series
-      const calculateAverage = (results: InfluxQueryResult[]): number => {
-        const validValues = results
-          .map((r) => r.value)
-          .filter((v) => v !== null && !isNaN(v));
-        if (validValues.length === 0) return 0;
-        return (
-          validValues.reduce((sum, val) => sum + val, 0) / validValues.length
-        );
-      };
-
-      const errorRate = calculateAverage(errorRateResult);
-      const successRate = Math.max(0, 1 - errorRate);
-
-      return {
-        startTime,
-        endTime,
-        avgResponseTime: calculateAverage(avgResponseTimeResult),
-        errorRate,
-        successRate,
-        requestsPerSecond: calculateAverage(requestsPerSecondResult),
-      };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to get metrics: ${errorMessage}`);
-      throw error;
+      this.logger.error('Failed to execute query', error);
+      throw new InternalServerErrorException('Failed to execute query');
     }
   }
 
@@ -251,9 +125,10 @@ export class InfluxDBService implements OnModuleInit {
         await this.client.ping(5000);
         this.logger.log('InfluxDB connection closed');
       } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : 'Unknown error';
-        this.logger.error(`Error closing InfluxDB connection: ${errorMessage}`);
+        this.logger.error('Error closing InfluxDB connection', error);
+        throw new InternalServerErrorException(
+          'Error closing InfluxDB connection',
+        );
       }
     }
   }
@@ -261,15 +136,10 @@ export class InfluxDBService implements OnModuleInit {
   async queryMetrics(
     options: MetricsQueryOptions,
   ): Promise<InfluxQueryResult[][]> {
-    const {
-      scenarioId,
-      duration = '1m',
-      interval = '1s',
-      metrics,
-      tags,
-      runAt,
-      endAt,
-    } = options;
+    const { runHistoryId, interval, metrics, tags, runAt, endAt } = options;
+    if (!runHistoryId) {
+      throw new InternalServerErrorException('Run history ID is required');
+    }
 
     try {
       const tagFilters: string[] = [];
@@ -280,8 +150,8 @@ export class InfluxDBService implements OnModuleInit {
 
       const tagFilterCondition =
         tagFilters.length > 0 ? `AND ${tagFilters.join(' AND ')}` : '';
-
-      const timeRange = this.parseDuration(duration);
+      const groupByFields = [`flow_id`, `step_id`];
+      if (interval) groupByFields.unshift(`time(${interval})`);
 
       const queries = metrics.map((metric) => {
         let query = '';
@@ -297,10 +167,10 @@ export class InfluxDBService implements OnModuleInit {
                 percentile(value, 95) as percentile_95,
                 time
               FROM "${measurement}"
-              WHERE scenario_id = '${scenarioId}' ${tagFilterCondition}
-              AND time > ${runAt ? `'${runAt.toISOString()}'` : timeRange}
+              WHERE run_history_id = '${runHistoryId}' ${tagFilterCondition}
+              AND time > ${runAt ? `'${runAt.toISOString()}'` : 'now()'}
               AND time < ${endAt ? `'${endAt.toISOString()}'` : 'now()'}
-              GROUP BY time(${interval}), flow_id, step_id
+              GROUP BY ${groupByFields.join(',')}
               ORDER BY time ASC
             `;
             break;
@@ -311,10 +181,10 @@ export class InfluxDBService implements OnModuleInit {
                 mean(value) as value,
                 time
               FROM "${measurement}"
-              WHERE scenario_id = '${scenarioId}' ${tagFilterCondition}
-              AND time > ${runAt ? `'${runAt.toISOString()}'` : timeRange}
+              WHERE run_history_id = '${runHistoryId}' ${tagFilterCondition}
+              AND time > ${runAt ? `'${runAt.toISOString()}'` : 'now()'}
               AND time < ${endAt ? `'${endAt.toISOString()}'` : 'now()'}
-              GROUP BY time(${interval}), flow_id, step_id
+              GROUP BY ${groupByFields.join(',')}
               ORDER BY time ASC
             `;
             break;
@@ -325,22 +195,24 @@ export class InfluxDBService implements OnModuleInit {
                 count(value) as value,
                 time
               FROM "${measurement}"
-              WHERE scenario_id = '${scenarioId}' ${tagFilterCondition}
-              AND time > ${runAt ? `'${runAt.toISOString()}'` : timeRange}
+              WHERE run_history_id = '${runHistoryId}' ${tagFilterCondition}
+              AND time > ${runAt ? `'${runAt.toISOString()}'` : 'now()'}
               AND time < ${endAt ? `'${endAt.toISOString()}'` : 'now()'}
-              GROUP BY time(${interval}), flow_id, step_id
+              GROUP BY ${groupByFields.join(',')}
               ORDER BY time ASC
             `;
             break;
           default:
-            throw new Error(`Unsupported metric: ${metric}`);
+            this.logger.error(`Unsupported metric: ${metric}`);
+            throw new InternalServerErrorException(`Failed to query metrics`);
         }
 
         return { query, measurement };
       });
 
       if (!this.client) {
-        throw new Error('InfluxDB client not initialized');
+        this.logger.error('InfluxDB client not initialized');
+        throw new InternalServerErrorException('Failed to query metrics');
       }
 
       try {
@@ -354,43 +226,63 @@ export class InfluxDBService implements OnModuleInit {
           `Failed to query metrics: ${error instanceof Error ? error.message : 'Unknown error'}`,
           error instanceof Error ? error.stack : undefined,
         );
-        throw error;
+        throw new InternalServerErrorException('Failed to query metrics');
       }
     } catch (error) {
       this.logger.error(
         `Failed to query tag inspection: ${error instanceof Error ? error.message : 'Unknown error'}`,
         error instanceof Error ? error.stack : undefined,
       );
-      throw error;
+      throw new InternalServerErrorException('Failed to query metrics');
     }
   }
 
-  private parseDuration(duration: string): string {
-    // If duration is a number (in seconds), convert to string with 's' unit
-    const numericDuration = parseInt(duration, 10);
-    if (!isNaN(numericDuration)) {
-      return `time > now() - ${numericDuration}s`;
+  async getRunAt(runHistoryId: string): Promise<Date> {
+    const query = `
+      SELECT first(value) as value, time 
+      FROM http_req_duration 
+      WHERE run_history_id = '${runHistoryId}' 
+      AND time > now() - 1h 
+      ORDER BY time ASC
+      LIMIT 1
+    `;
+
+    let retries = 0;
+    const maxRetries = 60;
+    let result = await this.query<InfluxQueryResult>(query);
+
+    while (result.length === 0 && retries < maxRetries) {
+      await new Promise((r) => setTimeout(r, 1000));
+      result = await this.query<InfluxQueryResult>(query);
+      retries++;
     }
 
-    // Otherwise parse with unit
-    const unit = duration.slice(-1);
-    const value = parseInt(duration.slice(0, -1), 10);
-
-    if (isNaN(value)) {
-      throw new Error(`Invalid duration format: ${duration}`);
+    if (result.length === 0) {
+      throw new InternalServerErrorException(
+        `InfluxDB timeout: cannot get run at for run history ${runHistoryId}`,
+      );
     }
 
-    switch (unit) {
-      case 's':
-        return `time > now() - ${value}s`;
-      case 'm':
-        return `time > now() - ${value}m`;
-      case 'h':
-        return `time > now() - ${value}h`;
-      case 'd':
-        return `time > now() - ${value}d`;
-      default:
-        throw new Error(`Unsupported duration unit: ${unit}`);
+    return this.convertNanoDateToDate(result[0].time);
+  }
+
+  async getEndAt(runHistoryId: string): Promise<Date> {
+    const query = `
+      SELECT last(value) as value, time 
+      FROM http_req_duration 
+      WHERE run_history_id = '${runHistoryId}' 
+      AND time > now() - 1h 
+      ORDER BY time DESC
+      LIMIT 1
+    `;
+
+    const result = await this.query<InfluxQueryResult>(query);
+    if (!result || result.length === 0) {
+      throw new InternalServerErrorException(
+        `No data found for the given run history ID: ${runHistoryId}`,
+      );
     }
+
+    return this.convertNanoDateToDate(result[0].time);
   }
 }
