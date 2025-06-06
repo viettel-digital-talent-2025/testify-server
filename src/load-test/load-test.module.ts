@@ -2,9 +2,11 @@ import { LoadTestsController } from '@/load-test/controllers/load-tests.controll
 import { MetricsController } from '@/load-test/controllers/metrics.controller';
 import { InfluxDBService } from '@/load-test/services/influxdb.service';
 import { K6Service } from '@/load-test/services/k6.service';
+import { K8sService } from '@/load-test/services/k8s.service';
 import { LoadTestsService } from '@/load-test/services/load-tests.service';
 import { MetricsService } from '@/load-test/services/metrics.service';
-import { RunHistoryRepository } from '@/run-history/run-history.repository';
+import { RunHistoryMetricsRepository } from '@/run-history/repositories/run-history-metrics.repository';
+import { RunHistoryRepository } from '@/run-history/repositories/run-history.repository';
 import { ScenarioRepository } from '@/scenario/repositories/scenario.repository';
 import { PrismaService } from '@/shared/services/prisma.service';
 import { SharedModule } from '@/shared/shared.module';
@@ -35,8 +37,10 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     MetricsService,
     PrismaService,
     K6Service,
+    K8sService,
     ScenarioRepository,
     RunHistoryRepository,
+    RunHistoryMetricsRepository,
   ],
   exports: [LoadTestsService, MetricsService],
 })
