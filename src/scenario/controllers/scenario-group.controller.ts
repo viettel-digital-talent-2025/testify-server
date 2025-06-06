@@ -38,9 +38,9 @@ export class ScenarioGroupController {
   })
   @Roles(Role.User)
   async findAll(@Request() req: RequestWithUser) {
-    const scenarioGroups = await this.scenarioGroupService.findAll(
-      req.user.userId,
-    );
+    const scenarioGroups = await this.scenarioGroupService.findAll({
+      userId: req.user.userId,
+    });
 
     return {
       message: 'Scenario groups retrieved successfully',
@@ -56,10 +56,10 @@ export class ScenarioGroupController {
     @Request() req: RequestWithUser,
     @Body() createScenarioGroupDto: CreateScenarioGroupDto,
   ) {
-    const scenarioGroup = await this.scenarioGroupService.create(
-      req.user.userId,
-      createScenarioGroupDto,
-    );
+    const scenarioGroup = await this.scenarioGroupService.create({
+      userId: req.user.userId,
+      data: createScenarioGroupDto,
+    });
 
     return {
       message: 'Scenario group created successfully',
@@ -78,10 +78,10 @@ export class ScenarioGroupController {
     @Param('id') id: string,
     @Body() updateScenarioGroupDto: Partial<CreateScenarioGroupDto>,
   ) {
-    const scenarioGroup = await this.scenarioGroupService.update(
+    const scenarioGroup = await this.scenarioGroupService.update({
       id,
-      updateScenarioGroupDto,
-    );
+      data: updateScenarioGroupDto,
+    });
 
     return {
       message: 'Scenario group updated successfully',
@@ -96,8 +96,8 @@ export class ScenarioGroupController {
     description: 'Scenario group deleted successfully',
   })
   @Roles(Role.User)
-  delete(@Param('id') id: string) {
-    const scenarioGroup = this.scenarioGroupService.delete(id);
+  async delete(@Param('id') id: string) {
+    const scenarioGroup = this.scenarioGroupService.delete({ id });
     return {
       message: 'Scenario group deleted successfully',
       scenarioGroup,

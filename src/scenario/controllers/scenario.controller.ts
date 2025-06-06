@@ -43,7 +43,7 @@ export class ScenarioController {
   })
   @Roles(Role.User)
   findAll(@Request() req: RequestWithUser): Promise<Scenario[]> {
-    return this.scenarioService.findAll(req.user.userId);
+    return this.scenarioService.findAll({ userId: req.user.userId });
   }
 
   @Get('group/:groupId')
@@ -58,7 +58,10 @@ export class ScenarioController {
     @Request() req: RequestWithUser,
     @Param('groupId') groupId: string,
   ): Promise<Scenario[]> {
-    return this.scenarioService.findAllByGroupId(groupId, req.user.userId);
+    return this.scenarioService.findAllByGroupId({
+      groupId,
+      userId: req.user.userId,
+    });
   }
 
   @Get(':id')
@@ -74,7 +77,7 @@ export class ScenarioController {
     @Param('id') id: string,
     @Request() req: RequestWithUser,
   ): Promise<Scenario> {
-    return this.scenarioService.findOne(id, req.user.userId);
+    return this.scenarioService.findOne({ id, userId: req.user.userId });
   }
 
   @Post()
@@ -90,7 +93,10 @@ export class ScenarioController {
     @Body() createScenarioDto: CreateScenarioDto,
     @Request() req: RequestWithUser,
   ): Promise<Scenario> {
-    return this.scenarioService.create(createScenarioDto, req.user.userId);
+    return this.scenarioService.create({
+      userId: req.user.userId,
+      data: createScenarioDto,
+    });
   }
 
   @Patch(':id')
@@ -108,7 +114,11 @@ export class ScenarioController {
     @Body() updateScenarioDto: UpdateScenarioDto,
     @Request() req: RequestWithUser,
   ): Promise<Scenario> {
-    return this.scenarioService.update(id, updateScenarioDto, req.user.userId);
+    return this.scenarioService.update({
+      id,
+      data: updateScenarioDto,
+      userId: req.user.userId,
+    });
   }
 
   @Delete(':id')
@@ -124,7 +134,7 @@ export class ScenarioController {
     @Param('id') id: string,
     @Request() req: RequestWithUser,
   ): Promise<Scenario> {
-    return this.scenarioService.remove(id, req.user.userId);
+    return this.scenarioService.remove({ id, userId: req.user.userId });
   }
 
   @Get(':id/history')
@@ -140,6 +150,9 @@ export class ScenarioController {
     @Param('id') id: string,
     @Request() req: RequestWithUser,
   ): Promise<RunHistory[]> {
-    return this.scenarioService.getTestHistory(id, req.user.userId);
+    return this.scenarioService.getTestHistory({
+      id,
+      userId: req.user.userId,
+    });
   }
 }
