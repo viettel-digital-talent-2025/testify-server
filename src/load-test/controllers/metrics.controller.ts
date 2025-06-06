@@ -3,11 +3,12 @@ import { RolesGuard } from '@/auth/guards/roles.guard';
 import { TokenGuard } from '@/auth/guards/token.guard';
 import { MetricsService } from '@/load-test/services/metrics.service';
 import { MetricsResponse } from '@/load-test/types/metrics.types';
+import { AppLoggerService } from '@/shared/services/app-logger.service';
 import { RequestWithUser } from '@/shared/types/request.types';
 import {
   Controller,
   Get,
-  NotFoundException,
+  InternalServerErrorException,
   Param,
   Query,
   Req,
@@ -24,32 +25,27 @@ import { Role } from '@prisma/client';
 
 @ApiTags('api/v1/metrics')
 @Controller('api/v1/metrics')
-// @UseGuards(TokenGuard, RolesGuard)
 export class MetricsController {
-  constructor(private readonly metricsService: MetricsService) {}
+  constructor(
+    private readonly logger: AppLoggerService,
+    private readonly metricsService: MetricsService,
+  ) {}
 
   @Get('/:scenarioId/:runHistoryId')
   @ApiOperation({ summary: 'Get realtime metrics for a scenario' })
   @ApiResponse({
     status: 200,
     description: 'Returns realtime metrics for the specified scenario.',
-    type: MetricsResponse,
   })
   @ApiResponse({ status: 404, description: 'Scenario or metrics not found.' })
-  @ApiParam({
-    name: 'scenarioId',
-    description: 'ID of the scenario',
-    type: 'string',
-  })
   @ApiParam({
     name: 'runHistoryId',
     description: 'ID of the run history',
     type: 'string',
   })
-  @ApiQuery({
-    name: 'duration',
-    description: 'Duration to query metrics for (e.g., "1m", "5m", "1h")',
-    required: false,
+  @ApiParam({
+    name: 'scenarioId',
+    description: 'ID of the scenario',
     type: 'string',
   })
   @ApiQuery({
@@ -66,9 +62,11 @@ export class MetricsController {
   })
   @ApiQuery({
     name: 'interval',
-    description: 'Time interval for metrics aggregation',
+    description:
+      'Time interval for metrics aggregation (e.g., "5s", "1m", "1h")',
     required: false,
     type: 'string',
+    default: '1m',
   })
   @ApiQuery({
     name: 'runAt',
@@ -86,12 +84,11 @@ export class MetricsController {
   @Roles(Role.User)
   async getMetrics(
     @Req() req: RequestWithUser,
-    @Param('scenarioId') scenarioId: string,
     @Param('runHistoryId') runHistoryId: string,
+    @Param('scenarioId') scenarioId: string,
     @Query('flow_id') flowId?: string,
     @Query('step_id') stepId?: string,
-    @Query('duration') duration?: string,
-    @Query('interval') interval?: string,
+    @Query('interval') interval = '1m',
     @Query('runAt') runAt?: string,
     @Query('endAt') endAt?: string,
   ): Promise<MetricsResponse> {
@@ -101,23 +98,23 @@ export class MetricsController {
         ...(stepId && { step_id: stepId }),
       };
 
-      return await this.metricsService.getMetrics({
-        userId: req.user.userId,
-        scenarioId,
+      const metrics = await this.metricsService.getMetrics({
         runHistoryId,
-        duration,
+        scenarioId,
+        userId: req.user.userId,
         interval,
         runAt,
         endAt,
         tags: Object.keys(tags).length > 0 ? tags : undefined,
       });
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
 
-      throw new NotFoundException(
-        `Failed to get realtime metrics for scenario ${scenarioId}`,
+      return metrics as MetricsResponse;
+    } catch (error) {
+      this.logger.error(
+        `Failed to get realtime metrics for scenario ${scenarioId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      throw new InternalServerErrorException(
+        'Failed to get realtime metrics for scenario',
       );
     }
   }
@@ -127,7 +124,6 @@ export class MetricsController {
   @ApiResponse({
     status: 200,
     description: 'Returns realtime metrics for the specified scenario.',
-    type: MetricsResponse,
   })
   @ApiResponse({ status: 404, description: 'Scenario or metrics not found.' })
   @ApiParam({
@@ -146,12 +142,6 @@ export class MetricsController {
     type: 'string',
   })
   @ApiQuery({
-    name: 'duration',
-    description: 'Duration to query metrics for (e.g., "1m", "5m", "1h")',
-    required: false,
-    type: 'string',
-  })
-  @ApiQuery({
     name: 'flow_id',
     description: 'Filter metrics by flow ID',
     required: false,
@@ -165,9 +155,11 @@ export class MetricsController {
   })
   @ApiQuery({
     name: 'interval',
-    description: 'Time interval for metrics aggregation',
+    description:
+      'Time interval for metrics aggregation (e.g., "5s", "1m", "1h")',
     required: false,
     type: 'string',
+    default: '1m',
   })
   @ApiQuery({
     name: 'runAt',
@@ -183,12 +175,11 @@ export class MetricsController {
   })
   async getMetricsForAiService(
     @Param('userId') userId: string,
-    @Param('scenarioId') scenarioId: string,
     @Param('runHistoryId') runHistoryId: string,
+    @Param('scenarioId') scenarioId: string,
     @Query('flow_id') flowId?: string,
     @Query('step_id') stepId?: string,
-    @Query('duration') duration?: string,
-    @Query('interval') interval?: string,
+    @Query('interval') interval = '1m',
     @Query('runAt') runAt?: string,
     @Query('endAt') endAt?: string,
   ): Promise<MetricsResponse> {
@@ -199,22 +190,20 @@ export class MetricsController {
       };
 
       return await this.metricsService.getMetrics({
-        userId,
-        scenarioId,
         runHistoryId,
-        duration,
+        scenarioId,
+        userId,
         interval,
         runAt,
         endAt,
         tags: Object.keys(tags).length > 0 ? tags : undefined,
       });
     } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-
-      throw new NotFoundException(
-        `Failed to get realtime metrics for scenario ${scenarioId}`,
+      this.logger.error(
+        `Failed to get realtime metrics for scenario ${scenarioId}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+      throw new InternalServerErrorException(
+        'Failed to get realtime metrics for scenario',
       );
     }
   }
