@@ -17,7 +17,8 @@ export interface BottleneckDto {
   stepId: string;
   severity: BottleneckSeverity;
   timestamp: Date;
-  latency: number;
+  avgLatency: number;
+  p95Latency: number;
   throughput: number;
   errorRate: number;
   alertAt: Date | null;

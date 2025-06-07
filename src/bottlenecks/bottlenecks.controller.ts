@@ -66,13 +66,9 @@ export class BottlenecksController {
   @UseGuards(TokenGuard, RolesGuard)
   @Roles(Role.User)
   async getBottlenecksByRunHistoryId(
-    @Req() req: RequestWithUser,
     @Param('runHistoryId') runHistoryId: string,
   ) {
-    return this.bottlenecksService.getBottlenecksByRunHistoryId(
-      runHistoryId,
-      req.user.userId,
-    );
+    return this.bottlenecksService.getBottlenecksByRunHistoryId(runHistoryId);
   }
 
   @Post('analyze')
@@ -86,5 +82,19 @@ export class BottlenecksController {
   @Roles(Role.User)
   async analyzeBottlenecks(@Body() body: { bottleneckId: string }) {
     return this.bottlenecksService.analyzeBottlenecks(body.bottleneckId);
+  }
+
+  @Get('count')
+  @ApiOperation({
+    summary: 'Get the count of bottlenecks for the current user',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns the count of bottlenecks for the current user.',
+  })
+  @UseGuards(TokenGuard, RolesGuard)
+  @Roles(Role.User)
+  async getBottlenecksCount(@Req() req: RequestWithUser) {
+    return this.bottlenecksService.getBottlenecksCount(req.user.userId);
   }
 }
