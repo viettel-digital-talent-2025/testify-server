@@ -1,44 +1,62 @@
 import { SchedulerWithScenario } from '@/scheduler/scheduler.dto';
+import { AppLoggerService } from '@/shared/services/app-logger.service';
 import { PrismaService } from '@/shared/services/prisma.service';
 import {
-  BadRequestException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { Scenario, Scheduler } from '@prisma/client';
 
 @Injectable()
 export class SchedulerRepository {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly logger: AppLoggerService,
+    private readonly prisma: PrismaService,
+  ) {
+    this.logger.setContext(SchedulerRepository.name);
+  }
 
   async findActiveSchedulers() {
-    return this.prisma.scheduler.findMany({
-      where: {
-        isActive: true,
-        timeEnd: {
-          gt: new Date(),
+    try {
+      return await this.prisma.scheduler.findMany({
+        where: {
+          isActive: true,
+          timeEnd: {
+            gt: new Date(),
+          },
         },
-      },
-      include: {
-        scenario: true,
-      },
-    });
+        include: {
+          scenario: true,
+        },
+      });
+    } catch (error) {
+      this.logger.error('Failed to find active schedulers', error);
+      throw new InternalServerErrorException(
+        'Failed to find active schedulers',
+      );
+    }
   }
 
   async findUserSchedulers(userId: string): Promise<Scheduler[]> {
-    return this.prisma.scheduler.findMany({
-      where: {
-        scenario: {
-          userId,
+    try {
+      return await this.prisma.scheduler.findMany({
+        where: {
+          scenario: {
+            userId,
+          },
         },
-      },
-      include: {
-        scenario: true,
-      },
-      orderBy: {
-        timeStart: 'desc',
-      },
-    });
+        include: {
+          scenario: true,
+        },
+        orderBy: {
+          timeStart: 'desc',
+        },
+      });
+    } catch (error) {
+      this.logger.error('Failed to find user schedulers', error);
+      throw new InternalServerErrorException('Failed to find user schedulers');
+    }
   }
 
   async findUserSchedulerById(id: string, userId: string) {
@@ -56,12 +74,17 @@ export class SchedulerRepository {
     scenarioId: string,
     userId: string,
   ): Promise<Scenario | null> {
-    return this.prisma.scenario.findFirst({
-      where: {
-        id: scenarioId,
-        userId,
-      },
-    });
+    try {
+      return await this.prisma.scenario.findFirst({
+        where: {
+          id: scenarioId,
+          userId,
+        },
+      });
+    } catch (error) {
+      this.logger.error('Failed to find scenario by id', error);
+      throw new InternalServerErrorException('Failed to find scenario by id');
+    }
   }
 
   async create(data: {
@@ -73,14 +96,15 @@ export class SchedulerRepository {
     config: string;
   }): Promise<SchedulerWithScenario> {
     try {
-      return this.prisma.scheduler.create({
+      return await this.prisma.scheduler.create({
         data,
         include: {
           scenario: true,
         },
       });
-    } catch {
-      throw new BadRequestException('Failed to create scheduler');
+    } catch (error) {
+      this.logger.error('Failed to create scheduler', error);
+      throw new InternalServerErrorException('Failed to create scheduler');
     }
   }
 
@@ -96,32 +120,41 @@ export class SchedulerRepository {
     },
   ): Promise<SchedulerWithScenario> {
     try {
-      return this.prisma.scheduler.update({
+      return await this.prisma.scheduler.update({
         where: { id },
         data,
         include: {
           scenario: true,
         },
       });
-    } catch {
-      throw new BadRequestException('Failed to update scheduler');
+    } catch (error) {
+      this.logger.error('Failed to update scheduler', error);
+      throw new InternalServerErrorException('Failed to update scheduler');
     }
   }
 
   async updateStatus(id: string, status: boolean): Promise<Scheduler> {
-    return this.prisma.scheduler.update({
-      where: { id },
-      data: { isActive: status },
-    });
+    try {
+      return await this.prisma.scheduler.update({
+        where: { id },
+        data: { isActive: status },
+      });
+    } catch (error) {
+      this.logger.error('Failed to update scheduler status', error);
+      throw new InternalServerErrorException(
+        'Failed to update scheduler status',
+      );
+    }
   }
 
   async delete(id: string): Promise<Scheduler> {
     try {
-      return this.prisma.scheduler.delete({
+      return await this.prisma.scheduler.delete({
         where: { id },
       });
-    } catch {
-      throw new BadRequestException('Failed to delete scheduler');
+    } catch (error) {
+      this.logger.error('Failed to delete scheduler', error);
+      throw new InternalServerErrorException('Failed to delete scheduler');
     }
   }
 }

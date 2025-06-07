@@ -54,10 +54,10 @@ export class SchedulerService implements OnModuleInit, OnModuleDestroy {
     }
 
     try {
-      await this.loadTestsService.runTest(
-        scheduler.scenarioId,
-        scheduler.scenario.userId,
-      );
+      await this.loadTestsService.runTest({
+        scenarioId: scheduler.scenarioId,
+        userId: scheduler.scenario.userId,
+      });
       this.logger.log(
         `Scheduled test completed for scenario ${scheduler.scenarioId}`,
       );
