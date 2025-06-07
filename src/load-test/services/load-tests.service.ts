@@ -37,7 +37,10 @@ export class LoadTestsService {
   }
 
   // emit status update to client
-  private async emitStatusUpdate({ redis, ...props }: EmitStatusUpdateProps) {
+  private async emitStatusUpdate({
+    redis = true,
+    ...props
+  }: EmitStatusUpdateProps) {
     const event: LoadTestStatusEvent = {
       ...props,
       type: 'message',
