@@ -5,8 +5,8 @@ migration:
 	pnpm dlx prisma db push
 	
 image:
-	docker build -t npkhang287/testify-app .
-	docker push npkhang287/testify-app
+	docker build -t npkhang287/testify-app:latest .
+	docker push npkhang287/testify-app:latest
 
 port-forward:
 	kubectl port-forward -n ingress-nginx svc/ingress-nginx-controller 31133:80

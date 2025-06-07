@@ -1,6 +1,20 @@
 version: '3.8'
 
 services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: testify-app
+    ports:
+      - '8080:3000'
+    depends_on:
+      - postgres
+      - redis
+      - k6
+      - influxdb
+      - grafana
+
   postgres:
     image: postgres:latest
     container_name: testify-postgres
@@ -42,7 +56,6 @@ services:
       - INFLUXDB_ADMIN_USER=testify
       - INFLUXDB_ADMIN_PASSWORD=testify-password
     restart: always
-
 
   grafana:
     image: grafana/grafana
