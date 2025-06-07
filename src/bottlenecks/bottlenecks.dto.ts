@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   Bottleneck,
   BottleneckSeverity,
+  BottleneckSource,
   RunHistory,
   Scenario,
   ScenarioFlow,
@@ -21,6 +22,7 @@ export interface BottleneckDto {
   p95Latency: number;
   throughput: number;
   errorRate: number;
+  source: BottleneckSource[];
   alertAt: Date | null;
   isRead: boolean;
   analysis: string | null;

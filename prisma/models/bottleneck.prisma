@@ -11,6 +11,7 @@ model Bottleneck {
     p95Latency   Float              @default(0)
     throughput   Float              @default(0)
     errorRate    Float              @default(0)
+    source       BottleneckSource[] @default([])
     isRead       Boolean            @default(false)
     alertAt      DateTime?
     analysis     String?
@@ -29,4 +30,10 @@ enum BottleneckSeverity {
     LOW
     MEDIUM
     HIGH
+}
+
+enum BottleneckSource {
+    LATENCY
+    THROUGHPUT
+    ERROR_RATE
 }

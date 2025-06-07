@@ -41,7 +41,10 @@ async function bootstrap() {
 
   // Enable CORS for SSE
   app.enableCors({
-    origin: serverConfig.frontend.FRONTEND_URL,
+    origin: [
+      serverConfig.frontend.FRONTEND_URL,
+      serverConfig.bottleneck.AI_SERVICE_URL,
+    ],
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
     credentials: true,
