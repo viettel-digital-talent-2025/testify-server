@@ -10,22 +10,12 @@ import { config } from 'dotenv';
 import fs from 'fs';
 import path from 'path';
 
-const envPath = fs.existsSync(path.resolve('.env.local'))
-  ? '.env.local'
-  : '.env';
-
-config({ path: envPath });
-
-if (!fs.existsSync(path.resolve(envPath))) {
-  throw new Error('Missing .env file!');
-}
-
 // --- Sub-config classes ---
 
 class PostgresConfig {
   @Type(() => Number)
   @IsNumber()
-  PORT: number;
+  DATABASE_PORT: number;
 
   @IsString()
   DATABASE_URL: string;
@@ -117,12 +107,32 @@ class LoadTestConfig {
   INFLUXDB_URL: string;
 }
 
+class K8sConfig {
+  @IsString()
+  NAMESPACE: string;
+}
+
+class BottleneckConfig {
+  @IsString()
+  AI_SERVICE_URL: string;
+}
+
 // --- Main config ---
 
 class ServerConfig {
+  @IsString()
+  APP_HOST: string;
+
   @Type(() => Number)
   @IsNumber()
-  PORT: number;
+  APP_PORT: number;
+
+  @IsString()
+  NODE_ENV: string;
+
+  @ValidateNested()
+  @Type(() => BottleneckConfig)
+  bottleneck: BottleneckConfig;
 
   @ValidateNested()
   @Type(() => PostgresConfig)
@@ -151,6 +161,10 @@ class ServerConfig {
   @ValidateNested()
   @Type(() => LoadTestConfig)
   loadTest: LoadTestConfig;
+
+  @ValidateNested()
+  @Type(() => K8sConfig)
+  k8s: K8sConfig;
 }
 
 // --- Load and validate config ---
@@ -178,16 +192,21 @@ function mapEnvToStructuredObject(env: NodeJS.ProcessEnv): ServerConfig {
   };
 
   return {
-    PORT: getRequiredNumberEnv('PORT'),
+    APP_HOST: getRequiredEnv('APP_HOST'),
+    APP_PORT: getRequiredNumberEnv('APP_PORT'),
+    NODE_ENV: getRequiredEnv('NODE_ENV'),
+    bottleneck: {
+      AI_SERVICE_URL: getRequiredEnv('AI_SERVICE_URL'),
+    },
     postgres: {
-      PORT: getRequiredNumberEnv('PORT'),
+      DATABASE_PORT: getRequiredNumberEnv('DATABASE_PORT'),
       DATABASE_URL: getRequiredEnv('DATABASE_URL'),
     },
     redis: {
       REDIS_HOST: getRequiredEnv('REDIS_HOST'),
       REDIS_PORT: getRequiredNumberEnv('REDIS_PORT'),
-      REDIS_USER: getRequiredEnv('REDIS_USER'),
-      REDIS_PASSWORD: getRequiredEnv('REDIS_PASSWORD'),
+      REDIS_USER: getOptionalEnv('REDIS_USER'),
+      REDIS_PASSWORD: getOptionalEnv('REDIS_PASSWORD'),
     },
     influxdb: {
       INFLUXDB_HOST: getRequiredEnv('INFLUXDB_HOST'),
@@ -218,8 +237,17 @@ function mapEnvToStructuredObject(env: NodeJS.ProcessEnv): ServerConfig {
       TEMP_DIR: getRequiredEnv('TEMP_DIR'),
       INFLUXDB_URL: getRequiredEnv('INFLUXDB_URL'),
     },
+    k8s: {
+      NAMESPACE: getRequiredEnv('NAMESPACE'),
+    },
   };
 }
+
+const envPath = fs.existsSync(path.resolve('.env.local'))
+  ? '.env.local'
+  : '.env';
+
+config({ path: envPath });
 
 const structuredEnv = mapEnvToStructuredObject(process.env);
 const serverConfig = plainToInstance(ServerConfig, structuredEnv);
