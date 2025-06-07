@@ -120,8 +120,12 @@ export class MailService {
             <div class="metrics">
               <h3>Performance Metrics</h3>
               <div class="metric-item">
-                <span class="metric-label">Latency:</span>
-                <span>${bottleneck.latency.toFixed(1)} ms</span>
+                <span class="metric-label">Avg Latency:</span>
+                <span>${bottleneck.avgLatency.toFixed(1)} ms</span>
+              </div>
+              <div class="metric-item">
+                <span class="metric-label">P95 Latency:</span>
+                <span>${bottleneck.p95Latency.toFixed(1)} ms</span>
               </div>
               <div class="metric-item">
                 <span class="metric-label">Throughput:</span>
