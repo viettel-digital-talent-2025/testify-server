@@ -64,6 +64,18 @@ export class ScenarioController {
     });
   }
 
+  @Get('count')
+  @ApiOperation({ summary: 'Get the count of scenarios for the current user' })
+  @ApiResponse({
+    status: 200,
+    description: 'Return the count of scenarios',
+    type: Number,
+  })
+  @Roles(Role.User)
+  getCount(@Request() req: RequestWithUser): Promise<Record<string, number>> {
+    return this.scenarioService.getCount({ userId: req.user.userId });
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a scenario by id' })
   @ApiResponse({
@@ -77,7 +89,10 @@ export class ScenarioController {
     @Param('id') id: string,
     @Request() req: RequestWithUser,
   ): Promise<Scenario> {
-    return this.scenarioService.findOne({ id, userId: req.user.userId });
+    return this.scenarioService.findOne({
+      id,
+      userId: req.user.userId,
+    });
   }
 
   @Post()

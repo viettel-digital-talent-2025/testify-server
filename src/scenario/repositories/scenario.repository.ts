@@ -4,19 +4,25 @@ import {
   UpdateFlowDto,
   UpdateScenarioInput,
 } from '@/scenario/dtos/scenario.dto';
+import { AppLoggerService } from '@/shared/services/app-logger.service';
 import { PrismaService } from '@/shared/services/prisma.service';
 import {
-  ConflictException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, RunHistory, Scenario } from '@prisma/client';
+import { RunHistory, Scenario } from '@prisma/client';
 
 @Injectable()
 export class ScenarioRepository {
-  constructor(private readonly prismaService: PrismaService) {}
+  constructor(
+    private readonly logger: AppLoggerService,
+    private readonly prismaService: PrismaService,
+  ) {
+    this.logger.setContext(ScenarioRepository.name);
+  }
 
-  async findAll(userId: string): Promise<Scenario[]> {
+  async findAll({ userId }: { userId: string }): Promise<Scenario[]> {
     try {
       return await this.prismaService.scenario.findMany({
         where: { userId },
@@ -37,14 +43,18 @@ export class ScenarioRepository {
         },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        throw new ConflictException('Failed to fetch scenarios');
-      }
-      throw error;
+      this.logger.error('Failed to find all scenarios', error);
+      throw new InternalServerErrorException('Failed to find all scenarios');
     }
   }
 
-  async findAllByGroupId(groupId: string, userId: string): Promise<Scenario[]> {
+  async findAllByGroupId({
+    groupId,
+    userId,
+  }: {
+    groupId: string;
+    userId: string;
+  }): Promise<Scenario[]> {
     try {
       return await this.prismaService.scenario.findMany({
         where: { groupId: groupId === 'null' ? null : groupId, userId },
@@ -74,18 +84,22 @@ export class ScenarioRepository {
         },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        throw new ConflictException('Failed to fetch scenarios');
-      }
-      throw error;
+      this.logger.error('Failed to find all scenarios by group id', error);
+      throw new InternalServerErrorException(
+        'Failed to find all scenarios by group id',
+      );
     }
   }
 
-  async findOne(
-    id: string,
-    userId: string,
-    runHistoryId?: string,
-  ): Promise<ScenarioDto> {
+  async findOne({
+    id,
+    userId,
+    runHistoryId,
+  }: {
+    id: string;
+    userId: string;
+    runHistoryId?: string;
+  }): Promise<ScenarioDto> {
     try {
       const scenario = await this.prismaService.scenario.findFirst({
         where: { id, userId },
@@ -128,13 +142,39 @@ export class ScenarioRepository {
 
       return scenario;
     } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        throw new ConflictException('Failed to fetch scenario');
-      }
-      throw error;
+      this.logger.error('Failed to find one scenario', error);
+      throw new InternalServerErrorException('Failed to find one scenario');
+    }
+  }
+
+  async getCount({
+    userId,
+  }: {
+    userId: string;
+  }): Promise<Record<string, number>> {
+    try {
+      const count = await this.prismaService.scenario.groupBy({
+        by: ['type'],
+        where: { userId },
+        _count: {
+          _all: true,
+        },
+      });
+
+      const countByType = count.reduce(
+        (acc, item) => {
+          acc[item.type] = item._count._all;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
+
+      return countByType;
+    } catch (error) {
+      this.logger.error('Failed to get count of scenarios', error);
+      throw new InternalServerErrorException(
+        'Failed to get count of scenarios',
+      );
     }
   }
 
@@ -159,21 +199,31 @@ export class ScenarioRepository {
         },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        throw new ConflictException('Failed to create scenario');
-      }
-      throw error;
+      this.logger.error('Failed to create scenario', error);
+      throw new InternalServerErrorException('Failed to create scenario');
     }
   }
 
-  async updateMetadata(id: string, data: Partial<Scenario>): Promise<void> {
+  async updateMetadata({
+    id,
+    data,
+  }: {
+    id: string;
+    data: Partial<Scenario>;
+  }): Promise<void> {
     await this.prismaService.scenario.update({
       where: { id },
       data,
     });
   }
 
-  async syncFlows(scenarioId: string, flows: UpdateFlowDto[]): Promise<void> {
+  async syncFlows({
+    scenarioId,
+    flows,
+  }: {
+    scenarioId: string;
+    flows: UpdateFlowDto[];
+  }): Promise<void> {
     const newFlows = flows.filter((f) => !f.id);
     const updatedFlows = flows.filter((f) => f.id);
 
@@ -271,13 +321,17 @@ export class ScenarioRepository {
     });
   }
 
-  async update(
-    id: string,
-    data: UpdateScenarioInput,
-    userId: string,
-  ): Promise<Scenario> {
+  async update({
+    id,
+    data,
+    userId,
+  }: {
+    id: string;
+    data: UpdateScenarioInput;
+    userId: string;
+  }): Promise<Scenario> {
     try {
-      await this.findOne(id, userId);
+      await this.findOne({ id, userId });
 
       return await this.prismaService.scenario.update({
         where: { id },
@@ -295,19 +349,20 @@ export class ScenarioRepository {
         },
       });
     } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        throw new ConflictException('Failed to update scenario');
-      }
-      throw error;
+      this.logger.error('Failed to update scenario', error);
+      throw new InternalServerErrorException('Failed to update scenario');
     }
   }
 
-  async remove(id: string, userId: string): Promise<Scenario> {
+  async remove({
+    id,
+    userId,
+  }: {
+    id: string;
+    userId: string;
+  }): Promise<Scenario> {
     try {
-      await this.findOne(id, userId);
+      await this.findOne({ id, userId });
 
       return await this.prismaService.scenario.delete({
         where: { id },
@@ -321,27 +376,20 @@ export class ScenarioRepository {
         },
       });
     } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw error;
-      }
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        throw new ConflictException('Failed to delete scenario');
-      }
-      throw error;
+      this.logger.error('Failed to delete scenario', error);
+      throw new InternalServerErrorException('Failed to delete scenario');
     }
   }
 
-  async getTestHistory(id: string): Promise<RunHistory[]> {
+  async getTestHistory({ id }: { id: string }): Promise<RunHistory[]> {
     try {
       return await this.prismaService.runHistory.findMany({
         where: { scenarioId: id },
         orderBy: { runAt: 'desc' },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError) {
-        throw new ConflictException('Failed to fetch test history');
-      }
-      throw error;
+      this.logger.error('Failed to get test history', error);
+      throw new InternalServerErrorException('Failed to get test history');
     }
   }
 }

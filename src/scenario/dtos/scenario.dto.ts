@@ -237,8 +237,9 @@ export interface ScenarioDto extends Scenario {
   group: ScenarioGroup | null;
   flows: ScenarioFlowsWithSteps[];
   runHistories: {
+    id: string;
     status: RunHistoryStatus;
-    runAt: Date;
+    runAt: Date | null;
     endAt: Date | null;
     progress: number;
   }[];
