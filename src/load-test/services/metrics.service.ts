@@ -38,16 +38,6 @@ export class MetricsService {
       const { runHistoryId, scenarioId, userId, interval, runAt, endAt, tags } =
         query;
 
-      console.log(
-        runHistoryId,
-        scenarioId,
-        userId,
-        interval,
-        runAt,
-        endAt,
-        tags,
-      );
-
       // Check if scenario exists
       const scenario = await this.scenarioRepository.findOne({
         id: scenarioId,
