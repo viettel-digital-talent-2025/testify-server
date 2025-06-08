@@ -3,7 +3,8 @@ import {
   RunHistoryWithScenarioName,
 } from '@/run-history/dtos/run-history.dto';
 import { RunHistoryService } from '@/run-history/run-history.service';
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { RequestWithUser } from '@/shared/types/request.types';
+import { Controller, Get, Param, Query, Req } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
 import { RunHistoryStatus } from '@prisma/client';
 
@@ -74,11 +75,13 @@ export class RunHistoryController {
     description: 'Filter by status (can be multiple, comma-separated)',
   })
   async findAll(
+    @Req() req: RequestWithUser,
     @Param('scenarioId') scenarioId: string,
     @Query() query: RunHistoryQueryRequestDto,
   ): Promise<{ data: RunHistoryWithScenarioName[]; total: number }> {
-    const where = this.service.buildWhere(query, scenarioId);
-    const paging = this.service.buildPaging(query);
+    const userId = req.user.userId;
+    const where = this.service.buildWhere(query, userId, scenarioId);
+    const paging = this.service.buildPaging(query, userId);
     return this.service.findAll({ where, ...paging });
   }
 }

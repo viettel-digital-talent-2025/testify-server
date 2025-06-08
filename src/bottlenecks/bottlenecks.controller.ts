@@ -66,9 +66,13 @@ export class BottlenecksController {
   @UseGuards(TokenGuard, RolesGuard)
   @Roles(Role.User)
   async getBottlenecksByRunHistoryId(
+    @Req() req: RequestWithUser,
     @Param('runHistoryId') runHistoryId: string,
   ) {
-    return this.bottlenecksService.getBottlenecksByRunHistoryId(runHistoryId);
+    return this.bottlenecksService.getBottlenecksByRunHistoryId(
+      req.user.userId,
+      runHistoryId,
+    );
   }
 
   @Post('analyze')

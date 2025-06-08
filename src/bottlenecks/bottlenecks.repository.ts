@@ -109,7 +109,7 @@ export class BottlenecksRepository {
             countHigh: item.countHigh,
           };
         }),
-      );  
+      );
     } catch (error) {
       this.logger.error('Error getting bottlenecks run history', error);
       throw new InternalServerErrorException(
@@ -119,11 +119,12 @@ export class BottlenecksRepository {
   }
 
   async getBottlenecksByRunHistoryId(
+    userId: string,
     runHistoryId: string,
   ): Promise<BottleneckRunHistory | null> {
     try {
       return await this.prisma.runHistory.findFirst({
-        where: { id: runHistoryId },
+        where: { id: runHistoryId, userId },
         include: {
           scenario: {
             include: {

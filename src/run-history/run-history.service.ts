@@ -44,8 +44,16 @@ export class RunHistoryService {
     return validStatuses.length > 0 ? validStatuses : undefined;
   }
 
-  buildWhere(query: RunHistoryQueryRequestDto, scenarioId: string) {
+  buildWhere(
+    query: RunHistoryQueryRequestDto,
+    userId: string,
+    scenarioId: string,
+  ) {
     const where: RunHistoryWhereInput = {};
+
+    if (userId) {
+      where.userId = userId;
+    }
 
     if (scenarioId && scenarioId !== 'undefined' && scenarioId !== 'null') {
       where.scenarioId = scenarioId;
@@ -97,13 +105,13 @@ export class RunHistoryService {
     return where;
   }
 
-  buildPaging(query: RunHistoryQueryRequestDto) {
+  buildPaging(query: RunHistoryQueryRequestDto, userId: string) {
     const { skip, take } = query;
     const orderBy =
       query.orderBy && query.order
         ? { [query.orderBy]: query.order }
         : undefined;
-    return { skip, take, orderBy };
+    return { skip, take, orderBy, userId };
   }
 
   async findAll(params: {

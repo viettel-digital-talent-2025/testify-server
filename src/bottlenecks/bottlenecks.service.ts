@@ -101,8 +101,9 @@ export class BottlenecksService implements OnModuleInit, OnModuleDestroy {
     return await this.bottlenecksRepository.getBottlenecksRunHistory(userId);
   }
 
-  async getBottlenecksByRunHistoryId(runHistoryId: string) {
+  async getBottlenecksByRunHistoryId(userId: string, runHistoryId: string) {
     return await this.bottlenecksRepository.getBottlenecksByRunHistoryId(
+      userId,
       runHistoryId,
     );
   }
