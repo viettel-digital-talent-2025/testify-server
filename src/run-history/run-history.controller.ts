@@ -1,15 +1,19 @@
+import { Roles } from '@/auth/decorators/roles.decorator';
+import { RolesGuard } from '@/auth/guards/roles.guard';
+import { TokenGuard } from '@/auth/guards/token.guard';
 import {
   RunHistoryQueryRequestDto,
   RunHistoryWithScenarioName,
 } from '@/run-history/dtos/run-history.dto';
 import { RunHistoryService } from '@/run-history/run-history.service';
 import { RequestWithUser } from '@/shared/types/request.types';
-import { Controller, Get, Param, Query, Req } from '@nestjs/common';
+import { Controller, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiParam, ApiQuery, ApiTags } from '@nestjs/swagger';
-import { RunHistoryStatus } from '@prisma/client';
+import { Role, RunHistoryStatus } from '@prisma/client';
 
 @ApiTags('Run History')
 @Controller('api/v1/run-history')
+@UseGuards(TokenGuard, RolesGuard)
 export class RunHistoryController {
   constructor(private readonly service: RunHistoryService) {}
 
@@ -74,6 +78,7 @@ export class RunHistoryController {
     isArray: true,
     description: 'Filter by status (can be multiple, comma-separated)',
   })
+  @Roles(Role.User)
   async findAll(
     @Req() req: RequestWithUser,
     @Param('scenarioId') scenarioId: string,

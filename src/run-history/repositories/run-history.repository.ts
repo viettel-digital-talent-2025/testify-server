@@ -167,9 +167,7 @@ export class RunHistoryRepository {
 
   async create(data: CreateRunHistoryDto): Promise<RunHistory> {
     try {
-      return await this.prisma.runHistory.create({
-        data,
-      });
+      return await this.prisma.runHistory.create({ data });
     } catch (error) {
       this.logger.error(
         `Failed to create run history: ${error instanceof Error ? error.message : 'Unknown error'}`,

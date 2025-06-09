@@ -92,6 +92,7 @@ export class RunHistoryQueryRequestDto {
 
 export interface CreateRunHistoryDto {
   scenarioId: string;
+  userId: string;
   status?: RunHistoryStatus;
 }
 

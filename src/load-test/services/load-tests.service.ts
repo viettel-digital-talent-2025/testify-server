@@ -13,6 +13,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  OnModuleDestroy,
 } from '@nestjs/common';
 import { RunHistory, RunHistoryStatus } from '@prisma/client';
 import Redis from 'ioredis';
@@ -20,7 +21,7 @@ import { Observable, Subject } from 'rxjs';
 import { K8sService } from './k8s.service';
 
 @Injectable()
-export class LoadTestsService {
+export class LoadTestsService implements OnModuleDestroy {
   private usersSubjects = new Map<string, Subject<LoadTestStatusEvent>>();
 
   constructor(
@@ -34,6 +35,13 @@ export class LoadTestsService {
     @InjectRedis() private readonly redisClient: Redis,
   ) {
     this.logger.setContext(LoadTestsService.name);
+  }
+
+  onModuleDestroy() {
+    this.usersSubjects.forEach((subject) => {
+      subject.complete();
+    });
+    this.usersSubjects.clear();
   }
 
   // emit status update to client
@@ -52,7 +60,10 @@ export class LoadTestsService {
       await this.redisClient.publish('load-test.status', JSON.stringify(event));
     }
 
-    this.usersSubjects.get(props.userId)?.next(event);
+    const subject = this.usersSubjects.get(props.userId);
+    if (subject) {
+      subject.next(event);
+    }
   }
 
   // get current user status that sse connection is open or not
@@ -75,29 +86,28 @@ export class LoadTestsService {
     if (isNewSubject) {
       subject = new Subject<LoadTestStatusEvent>();
       this.usersSubjects.set(userId, subject);
+
+      const runningJobs =
+        await this.runHistoryRepository.findRunningJobsByUserId({
+          userId,
+        });
+
+      await Promise.all(
+        runningJobs.map((job) =>
+          this.emitStatusUpdate({
+            userId,
+            runHistoryId: job.id,
+            scenarioId: job.scenarioId,
+            status: job.status,
+            runAt: job.runAt!,
+            redis: false,
+          }),
+        ),
+      );
     }
 
     return new Observable<LoadTestStatusEvent>((observer) => {
       const subscription = subject!.subscribe(observer);
-
-      if (isNewSubject) {
-        this.runHistoryRepository
-          .findRunningJobsByUserId({ userId })
-          .then((runningJobs) => {
-            void Promise.all(
-              runningJobs.map((job) =>
-                this.emitStatusUpdate({
-                  userId,
-                  runHistoryId: job.id,
-                  scenarioId: job.scenarioId,
-                  status: job.status,
-                  runAt: job.runAt!,
-                  redis: false,
-                }),
-              ),
-            );
-          });
-      }
 
       return () => {
         subscription.unsubscribe();
@@ -216,6 +226,7 @@ export class LoadTestsService {
     let runAt: Date;
     const runHistory = await this.runHistoryRepository.create({
       scenarioId,
+      userId,
       status: RunHistoryStatus.RUNNING,
     });
 
@@ -236,10 +247,7 @@ export class LoadTestsService {
 
       // get run at from influxdb
       runAt = await this.metricsService.getRunAt(runHistory.id);
-      await this.runHistoryRepository.update(runHistory.id, {
-        status: RunHistoryStatus.RUNNING,
-        runAt,
-      });
+      await this.runHistoryRepository.update(runHistory.id, { runAt });
 
       // emit started event to client
       setImmediate(() => {
@@ -292,14 +300,13 @@ export class LoadTestsService {
             });
 
             // emit status update to client
-            setImmediate(() => {
-              void this.emitStatusUpdate({
-                runHistoryId: runHistory.id,
-                scenarioId,
-                userId,
-                status,
-                runAt,
-              });
+
+            await this.emitStatusUpdate({
+              runHistoryId: runHistory.id,
+              scenarioId,
+              userId,
+              status,
+              runAt,
             });
           },
         );

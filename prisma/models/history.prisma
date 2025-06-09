@@ -2,6 +2,8 @@ model RunHistory {
     id         String           @id @default(cuid())
     scenarioId String
     scenario   Scenario         @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+    userId     String
+    user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
     runAt      DateTime?
     endAt      DateTime?
     avgLatency Float            @default(0)

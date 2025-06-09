@@ -11,6 +11,7 @@ model User {
   scenarios      Scenario[]
   scenarioGroups ScenarioGroup[]
   bottlenecks    Bottleneck[]
+  runHistories   RunHistory[]
 }
 
 enum Role {
