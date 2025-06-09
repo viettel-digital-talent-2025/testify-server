@@ -32,3 +32,6 @@ coverage
 .DS_Store
 *.swp
 *.swo 
+
+# k8s
+./k8s
