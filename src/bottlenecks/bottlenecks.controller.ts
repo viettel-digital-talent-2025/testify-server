@@ -2,6 +2,7 @@ import { Roles } from '@/auth/decorators/roles.decorator';
 import { RolesGuard } from '@/auth/guards/roles.guard';
 import { TokenGuard } from '@/auth/guards/token.guard';
 import { RequestWithUser } from '@/shared/types/request.types';
+import { SSEEvent } from '@/shared/types/sse.types';
 import {
   Body,
   Controller,
@@ -15,7 +16,7 @@ import {
 import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { Role } from '@prisma/client';
 import { Observable } from 'rxjs';
-import { SseEvent } from './bottlenecks.dto';
+import { BottleneckEvent } from './bottlenecks.dto';
 import { BottlenecksService } from './bottlenecks.service';
 
 @ApiTags('api/v1/bottlenecks')
@@ -28,14 +29,15 @@ export class BottlenecksController {
   @ApiResponse({
     status: 200,
     description: 'Returns an SSE stream of bottleneck alerts for the user.',
-    type: SseEvent,
   })
   @ApiParam({
     name: 'userId',
     description: 'ID of the user to subscribe to alerts for',
     type: 'string',
   })
-  alerts(@Param('userId') userId: string): Observable<SseEvent> {
+  alerts(
+    @Param('userId') userId: string,
+  ): Observable<SSEEvent<BottleneckEvent>> {
     return this.bottlenecksService.subscribeToUserAlerts(userId);
   }
 

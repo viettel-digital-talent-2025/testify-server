@@ -1,4 +1,3 @@
-import { ApiProperty } from '@nestjs/swagger';
 import {
   Bottleneck,
   BottleneckSeverity,
@@ -33,7 +32,7 @@ export interface BottleneckDto {
 }
 
 export interface BottleneckEvent {
-  type: 'bottlenecks';
+  event: 'bottlenecks';
   severity: BottleneckSeverity;
   timestamp: string;
   userId: string;
@@ -44,20 +43,6 @@ export interface BottleneckEvent {
   flowName: string;
   stepId: string;
   stepName: string;
-}
-
-export class SseEvent {
-  @ApiProperty({ description: 'Event type' })
-  type: string;
-
-  @ApiProperty({ description: 'Event data' })
-  data: any;
-
-  @ApiProperty({ description: 'Event id' })
-  id: string;
-
-  @ApiProperty({ description: 'Event retry' })
-  retry: number;
 }
 
 interface BottleneckStep extends ScenarioFlowStep {
