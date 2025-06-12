@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: testify-config
+  namespace: testify
+data:
+  APP_HOST: '0.0.0.0'
+  APP_PORT: '3000'
+  NODE_ENV: 'development'
+  TEMP_DIR: 'temp'
+  BACKEND_URL: 'http://testify-app:3000'
+  FRONTEND_URL: 'http://testify.local:3000'
+  AI_SERVICE_URL: 'http://testify-ai-service:8000'
+
+  DATABASE_PORT: '5432'
+  DATABASE_HOST: 'host.docker.internal'
+  DATABASE_NAME: 'testify'
+  DATABASE_USERNAME: 'testify'
+
+  REDIS_HOST: 'host.docker.internal'
+  REDIS_PORT: '6379'
+
+  SALT_ROUNDS: '10'
+  ACCESS_TOKEN_EXPIRATION: '1h'
+  REFRESH_TOKEN_EXPIRATION: '7d'
+
+  GMAIL_USER: 'npkhang287@gmail.com'
+  GMAIL_FROM: 'npkhang287@gmail.com'
+  MAIL_HOST: 'smtp.gmail.com'
+  MAIL_PORT: '587'
+
+  INFLUXDB_HOST: 'influxdb'
+  INFLUXDB_PORT: '8086'
+  INFLUXDB_URL: 'http://influxdb:8086/k6'
+  INFLUXDB_BUCKET: 'k6'
+  INFLUXDB_ORG: 'testify'
+  INFLUXDB_DB: 'k6'
+  INFLUXDB_ADMIN_USER: 'testify'
+
+  NAMESPACE: 'testify'
