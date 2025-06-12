@@ -1,3 +1,4 @@
+import { BottleneckPoint } from '@/load-test/types/metrics.types';
 import { AppLoggerService } from '@/shared/services/app-logger.service';
 import { PrismaService } from '@/shared/services/prisma.service';
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
@@ -109,7 +110,16 @@ export class BottlenecksRepository {
             countHigh: item.countHigh,
           };
         }),
-      );
+      ).then((items) => {
+        return items.sort((a, b) => {
+          if (a?.createdAt && b?.createdAt) {
+            return (
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+          }
+          return 0;
+        });
+      });
     } catch (error) {
       this.logger.error('Error getting bottlenecks run history', error);
       throw new InternalServerErrorException(
@@ -193,6 +203,45 @@ export class BottlenecksRepository {
     } catch (error) {
       this.logger.error('Error getting bottlenecks count', error);
       throw new InternalServerErrorException('Error getting bottlenecks count');
+    }
+  }
+
+  async getBottlenecksByFlowIdAndStepId(
+    userId: string,
+    runHistoryId?: string | null,
+    flowId?: string | null,
+    stepId?: string | null,
+  ): Promise<BottleneckPoint[]> {
+    if (!runHistoryId) return [];
+
+    try {
+      return await this.prisma.bottleneck.findMany({
+        where: {
+          userId,
+          runHistoryId,
+          flowId: flowId ?? undefined,
+          stepId: stepId ?? undefined,
+        },
+        orderBy: {
+          timestamp: 'asc',
+        },
+        select: {
+          id: true,
+          timestamp: true,
+          severity: true,
+          source: true,
+          p95Latency: true,
+          avgLatency: true,
+          throughput: true,
+          errorRate: true,
+          analysis: true,
+        },
+      });
+    } catch (error) {
+      this.logger.error('Error getting bottlenecks by step id', error);
+      throw new InternalServerErrorException(
+        'Error getting bottlenecks by step id',
+      );
     }
   }
 }

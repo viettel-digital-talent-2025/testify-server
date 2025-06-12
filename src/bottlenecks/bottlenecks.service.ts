@@ -1,14 +1,21 @@
 import { MailService } from '@/shared/services/mail.service';
+import { SSEEvent } from '@/shared/types/sse.types';
 import { InjectRedis } from '@nestjs-modules/ioredis';
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Redis } from 'ioredis';
 import { Observable, Subject } from 'rxjs';
-import { BottleneckEvent, SseEvent } from './bottlenecks.dto';
+import { BottleneckEvent } from './bottlenecks.dto';
 import { BottlenecksRepository } from './bottlenecks.repository';
 
 @Injectable()
 export class BottlenecksService implements OnModuleInit, OnModuleDestroy {
-  private usersSubjects = new Map<string, Subject<SseEvent>>();
+  private usersSubjects = new Map<
+    string,
+    {
+      subject: Subject<SSEEvent<BottleneckEvent>>;
+      pingInterval: NodeJS.Timeout;
+    }
+  >();
   private lastAlertTimestamp = new Map<string, number>();
   private subscriber: Redis;
 
@@ -31,8 +38,9 @@ export class BottlenecksService implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy() {
     this.subscriber.quit();
-    this.usersSubjects.forEach((subject) => {
+    this.usersSubjects.forEach(({ subject, pingInterval }) => {
       subject.complete();
+      clearInterval(pingInterval);
     });
     this.usersSubjects.clear();
   }
@@ -40,11 +48,11 @@ export class BottlenecksService implements OnModuleInit, OnModuleDestroy {
   private async emitAlert(event: BottleneckEvent) {
     const subject = this.usersSubjects.get(event.userId);
     if (subject) {
-      subject.next({
-        type: 'bottlenecks',
+      subject.subject.next({
+        event: 'bottlenecks',
         id: `${event.scenarioId}:${event.runHistoryId}`,
         retry: 3000,
-        data: JSON.stringify(event),
+        data: event,
       });
     }
   }
@@ -80,15 +88,27 @@ export class BottlenecksService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  subscribeToUserAlerts(userId: string): Observable<SseEvent> {
-    let subject = this.usersSubjects.get(userId);
+  subscribeToUserAlerts(userId: string): Observable<SSEEvent<BottleneckEvent>> {
+    let subject = this.usersSubjects.get(userId)?.subject;
     const isNewSubject = !subject;
     if (isNewSubject) {
-      subject = new Subject<SseEvent>();
-      this.usersSubjects.set(userId, subject);
+      subject = new Subject<SSEEvent<BottleneckEvent>>();
+
+      const pingInterval = setInterval(() => {
+        subject!.next({
+          event: 'ping',
+          id: `ping:${userId}`,
+          retry: 3000,
+        });
+      }, 15000);
+
+      this.usersSubjects.set(userId, {
+        subject,
+        pingInterval,
+      });
     }
 
-    return new Observable<SseEvent>((observer) => {
+    return new Observable<SSEEvent<BottleneckEvent>>((observer) => {
       const subscription = subject!.subscribe(observer);
       return () => {
         subscription.unsubscribe();
