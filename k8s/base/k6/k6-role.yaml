@@ -1,0 +1,16 @@
+# k6-role.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: k6-test-role
+  namespace: testify
+rules:
+  - apiGroups: ['']
+    resources: ['configmaps']
+    verbs: ['create', 'get', 'delete']
+  - apiGroups: ['batch']
+    resources: ['jobs']
+    verbs: ['create', 'get', 'delete', 'watch']
+  - apiGroups: ['']
+    resources: ['pods', 'pods/log']
+    verbs: ['get', 'delete', 'list', 'watch']
