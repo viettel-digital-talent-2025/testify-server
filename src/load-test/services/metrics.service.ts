@@ -1,8 +1,9 @@
+import { BottlenecksRepository } from '@/bottlenecks/bottlenecks.repository';
 import { ScenarioRepository } from '@/scenario/repositories/scenario.repository';
+import { AppLoggerService } from '@/shared/services/app-logger.service';
 import {
   Injectable,
   InternalServerErrorException,
-  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { MetricsQuery } from '../types/metrics.types';
@@ -10,12 +11,14 @@ import { InfluxDBService } from './influxdb.service';
 
 @Injectable()
 export class MetricsService {
-  private readonly logger = new Logger(MetricsService.name);
-
   constructor(
+    private readonly logger: AppLoggerService,
     private readonly influxDBService: InfluxDBService,
     private readonly scenarioRepository: ScenarioRepository,
-  ) {}
+    private readonly bottlenecksRepository: BottlenecksRepository,
+  ) {
+    this.logger.setContext(MetricsService.name);
+  }
 
   private isTagsObject(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
@@ -45,6 +48,7 @@ export class MetricsService {
         runHistoryId,
       });
 
+      // Check if scenario exists
       if (!scenario) {
         throw new NotFoundException(`Scenario ${scenarioId} not found`);
       }
@@ -57,31 +61,43 @@ export class MetricsService {
           }
         : undefined;
 
-      // Query InfluxDB for metrics
-      const metrics = await this.influxDBService.queryMetrics({
-        runHistoryId:
+      const [metrics, bottlenecks] = await Promise.all([
+        // Query InfluxDB for metrics
+        this.influxDBService.queryMetrics({
+          runHistoryId:
+            runHistoryId === 'undefined'
+              ? scenario.runHistories[0]?.id
+              : runHistoryId,
+          interval,
+          metrics: ['http_req_duration', 'http_reqs', 'errors'],
+          tags: safeTags,
+          runAt: runAt ? new Date(runAt) : scenario.runHistories[0]?.runAt,
+          endAt: endAt ? new Date(endAt) : scenario.runHistories[0]?.endAt,
+        }),
+        // Query bottlenecks
+        this.bottlenecksRepository.getBottlenecksByFlowIdAndStepId(
+          userId,
           runHistoryId === 'undefined'
             ? scenario.runHistories[0]?.id
             : runHistoryId,
-        interval,
-        metrics: ['http_req_duration', 'http_reqs', 'errors'],
-        tags: safeTags,
-        runAt: runAt ? new Date(runAt) : scenario.runHistories[0]?.runAt,
-        endAt: endAt ? new Date(endAt) : scenario.runHistories[0]?.endAt,
-      });
+          safeTags?.flow_id,
+          safeTags?.step_id,
+        ),
+      ]);
 
-      const latencyPoints = metrics[0].map((m) => ({
+      // format metrics
+      const latencyPoints = metrics[0]?.map((m) => ({
         timestamp: m.time.toISOString(),
         avg: m.mean ?? 0,
         p95: m.percentile_95 ?? 0,
       }));
 
-      const throughputPoints = metrics[1].map((m) => ({
+      const throughputPoints = metrics[1]?.map((m) => ({
         timestamp: m.time.toISOString(),
         value: (m.value ?? 0) / 5,
       }));
 
-      const errorRatePoints = metrics[2].map((m) => ({
+      const errorRatePoints = metrics[2]?.map((m) => ({
         timestamp: m.time.toISOString(),
         value: m.value ?? 0,
       }));
@@ -97,11 +113,12 @@ export class MetricsService {
           throughput: throughputPoints,
           errorRate: errorRatePoints,
         },
-        status: scenario.runHistories[0].status,
-        progress: scenario.runHistories[0].progress,
+        bottlenecks,
+        status: scenario.runHistories[0]?.status,
+        progress: scenario.runHistories[0]?.progress,
         lastUpdated: new Date().toISOString(),
-        runAt: scenario.runHistories[0].runAt?.toISOString() || null,
-        endAt: scenario.runHistories[0].endAt?.toISOString() || null,
+        runAt: scenario.runHistories[0]?.runAt?.toISOString() || null,
+        endAt: scenario.runHistories[0]?.endAt?.toISOString() || null,
       };
     } catch (error) {
       this.logger.error(

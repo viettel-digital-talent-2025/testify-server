@@ -12,9 +12,6 @@ export interface LoadTestStatusEvent {
   userId: string;
   status: RunHistoryStatus;
   runAt: Date;
-  type: string;
-  id: string;
-  retry: number;
 }
 
 export interface EmitStatusUpdateProps {

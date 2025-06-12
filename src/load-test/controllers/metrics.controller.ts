@@ -29,7 +29,9 @@ export class MetricsController {
   constructor(
     private readonly logger: AppLoggerService,
     private readonly metricsService: MetricsService,
-  ) {}
+  ) {
+    this.logger.setContext(MetricsController.name);
+  }
 
   @Get('/:scenarioId/:runHistoryId')
   @ApiOperation({ summary: 'Get realtime metrics for a scenario' })
@@ -108,7 +110,7 @@ export class MetricsController {
         tags: Object.keys(tags).length > 0 ? tags : undefined,
       });
 
-      return metrics as MetricsResponse;
+      return metrics;
     } catch (error) {
       this.logger.error(
         `Failed to get realtime metrics for scenario ${scenarioId}: ${error instanceof Error ? error.message : 'Unknown error'}`,

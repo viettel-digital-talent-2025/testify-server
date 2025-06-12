@@ -1,3 +1,9 @@
+import {
+  BottleneckSeverity,
+  BottleneckSource,
+  RunHistoryStatus,
+} from '@prisma/client';
+
 export interface MetricsQuery {
   runHistoryId?: string;
   scenarioId: string;
@@ -28,6 +34,18 @@ export interface Metrics {
   errorRate: TimeSeriesPoint[];
 }
 
+export interface BottleneckPoint {
+  id: string;
+  timestamp: Date;
+  severity: BottleneckSeverity;
+  source: BottleneckSource[];
+  p95Latency: number;
+  avgLatency: number;
+  throughput: number;
+  errorRate: number;
+  analysis: string | null;
+}
+
 export interface MetricsResponse {
   runHistoryId?: string;
   scenarioId: string;
@@ -38,6 +56,8 @@ export interface MetricsResponse {
     step_id?: string;
   };
   metrics: Metrics;
+  bottlenecks: BottleneckPoint[];
+  status: RunHistoryStatus;
   progress: number;
   lastUpdated: string;
   runAt: string | null;
