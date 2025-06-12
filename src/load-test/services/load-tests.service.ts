@@ -8,6 +8,7 @@ import { RunHistoryMetricsRepository } from '@/run-history/repositories/run-hist
 import { RunHistoryRepository } from '@/run-history/repositories/run-history.repository';
 import { ScenarioRepository } from '@/scenario/repositories/scenario.repository';
 import { AppLoggerService } from '@/shared/services/app-logger.service';
+import { SSEEvent } from '@/shared/types/sse.types';
 import { InjectRedis } from '@nestjs-modules/ioredis/dist/redis.decorators';
 import {
   Injectable,
@@ -22,7 +23,13 @@ import { K8sService } from './k8s.service';
 
 @Injectable()
 export class LoadTestsService implements OnModuleDestroy {
-  private usersSubjects = new Map<string, Subject<LoadTestStatusEvent>>();
+  private usersSubjects = new Map<
+    string,
+    {
+      subject: Subject<SSEEvent<LoadTestStatusEvent>>;
+      pingInterval: NodeJS.Timeout;
+    }
+  >();
 
   constructor(
     private readonly logger: AppLoggerService,
@@ -38,8 +45,9 @@ export class LoadTestsService implements OnModuleDestroy {
   }
 
   onModuleDestroy() {
-    this.usersSubjects.forEach((subject) => {
+    this.usersSubjects.forEach(({ subject, pingInterval }) => {
       subject.complete();
+      clearInterval(pingInterval);
     });
     this.usersSubjects.clear();
   }
@@ -49,29 +57,30 @@ export class LoadTestsService implements OnModuleDestroy {
     redis = true,
     ...props
   }: EmitStatusUpdateProps) {
-    const event: LoadTestStatusEvent = {
-      ...props,
-      type: 'message',
+    const event: SSEEvent<LoadTestStatusEvent> = {
+      data: props,
+      event: 'message',
       id: `${props.runHistoryId}:${props.scenarioId}`,
       retry: 3000,
     };
 
     if (redis) {
-      await this.redisClient.publish('load-test.status', JSON.stringify(event));
+      const message = JSON.stringify(props);
+      await this.redisClient.publish('load-test.status', message);
     }
 
     const subject = this.usersSubjects.get(props.userId);
     if (subject) {
-      subject.next(event);
+      subject.subject.next(event);
     }
   }
 
   // get current user status that sse connection is open or not
   getCurrentUserStatus({ userId }: { userId: string }): {
-    stream: Observable<LoadTestStatusEvent> | null;
+    stream: Observable<SSEEvent<LoadTestStatusEvent>> | null;
   } {
     return {
-      stream: this.usersSubjects.get(userId)?.asObservable() || null,
+      stream: this.usersSubjects.get(userId)?.subject.asObservable() || null,
     };
   }
 
@@ -80,12 +89,26 @@ export class LoadTestsService implements OnModuleDestroy {
     userId,
   }: {
     userId: string;
-  }): Promise<Observable<LoadTestStatusEvent>> {
-    let subject = this.usersSubjects.get(userId);
+  }): Promise<Observable<SSEEvent<LoadTestStatusEvent>>> {
+    let subject = this.usersSubjects.get(userId)?.subject;
     const isNewSubject = !subject;
+
     if (isNewSubject) {
-      subject = new Subject<LoadTestStatusEvent>();
-      this.usersSubjects.set(userId, subject);
+      subject = new Subject<SSEEvent<LoadTestStatusEvent>>();
+
+      const pingInterval = setInterval(() => {
+        subject!.next({
+          data: undefined,
+          event: 'ping',
+          id: `ping:${userId}`,
+          retry: 3000,
+        });
+      }, 15000);
+
+      this.usersSubjects.set(userId, {
+        subject,
+        pingInterval,
+      });
 
       const runningJobs =
         await this.runHistoryRepository.findRunningJobsByUserId({
@@ -106,7 +129,7 @@ export class LoadTestsService implements OnModuleDestroy {
       );
     }
 
-    return new Observable<LoadTestStatusEvent>((observer) => {
+    return new Observable<SSEEvent<LoadTestStatusEvent>>((observer) => {
       const subscription = subject!.subscribe(observer);
 
       return () => {
@@ -210,8 +233,18 @@ export class LoadTestsService implements OnModuleDestroy {
       await this.runHistoryRepository.findRunningJobsByScenarioId({
         scenarioId,
       });
+    let runHistory: RunHistory | null = null;
+
     if (runHistories.length > 0) {
-      return runHistories[0];
+      const isExistingJob = await this.k8sService.isExistingJob(
+        runHistories[0].id,
+      );
+
+      if (isExistingJob) {
+        return runHistories[0];
+      }
+
+      runHistory = runHistories[0];
     }
 
     const scenario = await this.scenarioRepository.findOne({
@@ -224,11 +257,13 @@ export class LoadTestsService implements OnModuleDestroy {
 
     // create run history
     let runAt: Date;
-    const runHistory = await this.runHistoryRepository.create({
-      scenarioId,
-      userId,
-      status: RunHistoryStatus.RUNNING,
-    });
+    if (!runHistory) {
+      runHistory = await this.runHistoryRepository.create({
+        scenarioId,
+        userId,
+        status: RunHistoryStatus.RUNNING,
+      });
+    }
 
     try {
       // Generate and write k6 script with scenario ID
@@ -300,7 +335,6 @@ export class LoadTestsService implements OnModuleDestroy {
             });
 
             // emit status update to client
-
             await this.emitStatusUpdate({
               runHistoryId: runHistory.id,
               scenarioId,

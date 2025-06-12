@@ -1,3 +1,4 @@
+import { BottlenecksRepository } from '@/bottlenecks/bottlenecks.repository';
 import { LoadTestsController } from '@/load-test/controllers/load-tests.controller';
 import { MetricsController } from '@/load-test/controllers/metrics.controller';
 import { InfluxDBService } from '@/load-test/services/influxdb.service';
@@ -41,6 +42,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     ScenarioRepository,
     RunHistoryRepository,
     RunHistoryMetricsRepository,
+    BottlenecksRepository,
   ],
   exports: [LoadTestsService, MetricsService],
 })

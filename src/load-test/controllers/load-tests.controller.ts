@@ -1,6 +1,7 @@
 import { RolesGuard } from '@/auth/guards/roles.guard';
 import { TokenGuard } from '@/auth/guards/token.guard';
 import { RequestWithUser } from '@/shared/types/request.types';
+import { SSEEvent } from '@/shared/types/sse.types';
 import {
   Controller,
   Delete,
@@ -78,20 +79,15 @@ export class LoadTestsController {
   }
 
   @Sse('status/:userId')
-  async loadUserTestStatus(@Param('userId') userId: string): Promise<
-    Observable<{
-      data: string;
-      type: string;
-      id: string;
-      retry: number;
-    }>
-  > {
+  async loadUserTestStatus(
+    @Param('userId') userId: string,
+  ): Promise<Observable<SSEEvent<LoadTestStatusEvent>>> {
     const { stream } = this.loadTestsService.getCurrentUserStatus({ userId });
 
-    const formatEvent = (event: LoadTestStatusEvent) => ({
-      data: JSON.stringify(event),
-      type: 'message',
-      id: `${event.scenarioId}:${event.runHistoryId}`,
+    const formatEvent = (event: SSEEvent<LoadTestStatusEvent>) => ({
+      data: event.data,
+      event: event.event,
+      id: event.id,
       retry: 3000,
     });
 
