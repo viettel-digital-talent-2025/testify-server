@@ -8,23 +8,23 @@ export class AppLoggerService extends Logger implements LoggerService {
     this.context = context;
   }
 
-  log(message: string, context?: string) {
-    super.log(message, context || AppLoggerService.name);
+  log(message: string) {
+    super.log(message);
   }
 
-  error(message: string, trace?: string, context?: string) {
-    super.error(message, trace, context || AppLoggerService.name);
+  error(message: string, trace?: string) {
+    super.error(message, trace);
   }
 
-  warn(message: string, context?: string) {
-    super.warn(message, context || AppLoggerService.name);
+  warn(message: string) {
+    super.warn(message);
   }
 
-  debug(message: string, context?: string) {
-    super.debug(message, context || AppLoggerService.name);
+  debug(message: string) {
+    super.debug(message);
   }
 
-  verbose(message: string, context?: string) {
-    super.verbose(message, context || AppLoggerService.name);
+  verbose(message: string) {
+    super.verbose(message);
   }
 }
