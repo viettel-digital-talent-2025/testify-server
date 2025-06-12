@@ -1,0 +1,26 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: testify-ingress
+  namespace: testify
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    cert-manager.io/cluster-issuer: 'letsencrypt-prod'
+    nginx.ingress.kubernetes.io/force-ssl-redirect: 'true'
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - testify.lat
+      secretName: testify-tls
+  rules:
+    - host: testify.lat
+      http:
+        paths:
+          - path: /testify-app(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: testify-app
+                port:
+                  number: 3000
