@@ -19,11 +19,11 @@ model Bottleneck {
     updatedAt    DateTime           @updatedAt
 
     // Relations
-    user       User             @relation(fields: [userId], references: [id])
-    runHistory RunHistory       @relation(fields: [runHistoryId], references: [id])
-    scenario   Scenario         @relation(fields: [scenarioId], references: [id])
-    flow       ScenarioFlow     @relation(fields: [flowId], references: [id])
-    step       ScenarioFlowStep @relation(fields: [stepId], references: [id])
+    user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+    runHistory RunHistory       @relation(fields: [runHistoryId], references: [id], onDelete: Cascade)
+    scenario   Scenario         @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
+    flow       ScenarioFlow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+    step       ScenarioFlowStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
 }
 
 enum BottleneckSeverity {

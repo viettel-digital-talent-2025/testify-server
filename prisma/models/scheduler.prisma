@@ -1,7 +1,7 @@
 model Scheduler {
     id             String    @id @default(cuid())
     scenarioId     String
-    scenario       Scenario  @relation(fields: [scenarioId], references: [id])
+    scenario       Scenario  @relation(fields: [scenarioId], references: [id], onDelete: Cascade)
     timeStart      DateTime  @default(now())
     timeEnd        DateTime?
     cronExpression String
