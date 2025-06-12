@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: testify-app
+  namespace: testify
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: testify-app
+  template:
+    metadata:
+      labels:
+        app: testify-app
+    spec:
+      containers:
+        - name: testify-app
+          image: npkhang287/testify-app:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: testify-config
+            - secretRef:
+                name: testify-secret
+          resources:
+            requests:
+              memory: '512Mi'
+              cpu: '500m'
+            limits:
+              memory: '1Gi'
+              cpu: '1000m'
