@@ -1,4 +1,4 @@
-import { CreateK6Job, K8sJob } from '@/load-test/types/k8s.types';
+import { CreateK6Job } from '@/load-test/types/k8s.types';
 import serverConfig from '@/shared/config';
 import { AppLoggerService } from '@/shared/services/app-logger.service';
 import * as k8s from '@kubernetes/client-node';
@@ -241,9 +241,14 @@ export class K8sService {
           const status = obj.status;
           if (!status) return;
 
-          const activePods = status.active ?? 0;
+          const activePods = status?.active ?? 0;
+          const uncountedTerminatedPods =
+            status?.uncountedTerminatedPods?.failed?.length ?? 0;
+
           if (activePods === 0) {
-            await onComplete(RunHistoryStatus.SUCCESS);
+            if (uncountedTerminatedPods) {
+              await onComplete(RunHistoryStatus.SUCCESS);
+            }
             if (abortController) {
               abortController.abort();
             }
@@ -253,9 +258,7 @@ export class K8sService {
         (err) => {
           if (err) {
             if (err.name === 'AbortError') {
-              this.logger.log(`Watch aborted for job ${jobName} (expected)`);
             } else {
-              this.logger.error(`Watch error for job ${jobName}:`, err);
               onComplete(RunHistoryStatus.FAILED);
               if (abortController) {
                 abortController.abort();
@@ -271,17 +274,18 @@ export class K8sService {
     }
   }
 
-  async getUserRunningJobs(userId: string): Promise<K8sJob[]> {
-    const res = await this.batchApi.listNamespacedJob({
-      namespace: this.namespace,
-      labelSelector: `user-id=${userId}`,
-    });
+  async isExistingJob(runHistoryId: string): Promise<boolean> {
+    try {
+      const jobName = `k6-load-test-${runHistoryId}`;
+      const res = await this.batchApi.readNamespacedJob({
+        name: jobName,
+        namespace: this.namespace,
+      });
 
-    return res.items
-      .filter((job) => !job.status?.succeeded && !job.status?.failed)
-      .map((job) => ({
-        runHistoryId: job.metadata?.labels?.runHistoryId,
-        scenarioId: job.metadata?.labels?.scenarioId,
-      }));
+      return res !== null;
+    } catch (error) {
+      this.logger.error(`Error checking if job exists: ${error}`);
+      return false;
+    }
   }
 }
