@@ -138,7 +138,7 @@ export class InfluxDBService implements OnModuleInit {
   ): Promise<InfluxQueryResult[][]> {
     const { runHistoryId, interval, metrics, tags, runAt, endAt } = options;
     if (!runHistoryId) {
-      throw new InternalServerErrorException('Run history ID is required');
+      return [[], [], []];
     }
 
     try {
@@ -151,7 +151,18 @@ export class InfluxDBService implements OnModuleInit {
       const tagFilterCondition =
         tagFilters.length > 0 ? `AND ${tagFilters.join(' AND ')}` : '';
       const groupByFields = [`flow_id`, `step_id`];
+
       if (interval) groupByFields.unshift(`time(${interval})`);
+
+      // TODO: add time range condition
+      const runAtCondition = runAt
+        ? ` AND time > '${runAt.toISOString()}'`
+        : '';
+      const endAtCondition = endAt
+        ? ` AND time < '${endAt.toISOString()}'`
+        : '';
+      const groupByFieldsCondition =
+        groupByFields.length > 0 ? `GROUP BY ${groupByFields.join(',')}` : '';
 
       const queries = metrics.map((metric) => {
         let query = '';
@@ -168,23 +179,23 @@ export class InfluxDBService implements OnModuleInit {
                 time
               FROM "${measurement}"
               WHERE run_history_id = '${runHistoryId}' ${tagFilterCondition}
-              AND time > ${runAt ? `'${runAt.toISOString()}'` : 'now()'}
-              AND time < ${endAt ? `'${endAt.toISOString()}'` : 'now()'}
-              GROUP BY ${groupByFields.join(',')}
+              ${runAtCondition}
+              ${endAtCondition}
+              ${groupByFieldsCondition}
               ORDER BY time ASC
             `;
             break;
           case 'errors':
-            measurement = 'errors'; // Use our custom errors measurement
+            measurement = 'errors';
             query = `
               SELECT 
                 mean(value) as value,
                 time
               FROM "${measurement}"
               WHERE run_history_id = '${runHistoryId}' ${tagFilterCondition}
-              AND time > ${runAt ? `'${runAt.toISOString()}'` : 'now()'}
-              AND time < ${endAt ? `'${endAt.toISOString()}'` : 'now()'}
-              GROUP BY ${groupByFields.join(',')}
+              ${runAtCondition}
+              ${endAtCondition}
+              ${groupByFieldsCondition}
               ORDER BY time ASC
             `;
             break;
@@ -196,9 +207,9 @@ export class InfluxDBService implements OnModuleInit {
                 time
               FROM "${measurement}"
               WHERE run_history_id = '${runHistoryId}' ${tagFilterCondition}
-              AND time > ${runAt ? `'${runAt.toISOString()}'` : 'now()'}
-              AND time < ${endAt ? `'${endAt.toISOString()}'` : 'now()'}
-              GROUP BY ${groupByFields.join(',')}
+              ${runAtCondition}
+              ${endAtCondition}
+              ${groupByFieldsCondition}
               ORDER BY time ASC
             `;
             break;
