@@ -76,6 +76,7 @@ export class ScenarioRepository {
             orderBy: { runAt: 'desc' },
             take: 1,
             select: {
+              id: true,
               status: true,
               runAt: true,
               endAt: true,
