@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: testify-ai-service
+  namespace: testify
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: testify-ai-service
+  template:
+    metadata:
+      labels:
+        app: testify-ai-service
+    spec:
+      containers:
+        - name: testify-ai-service
+          image: npkhang287/testify-ai-service:latest
+          imagePullPolicy: Always
+          resources:
+            requests:
+              memory: '128Mi'
+              cpu: '100m'
+            limits:
+              memory: '256Mi'
+              cpu: '300m'
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: testify-config
+            - secretRef:
+                name: testify-secret
+          volumeMounts:
+            - name: ai-service-pvc
+              mountPath: /app/data
+      volumes:
+        - name: ai-service-pvc
+          persistentVolumeClaim:
+            claimName: ai-service-pvc
