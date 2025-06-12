@@ -79,7 +79,7 @@ export class BottlenecksService implements OnModuleInit, OnModuleDestroy {
         this.emitAlert(event);
         this.lastAlertTimestamp.set(key, Date.now());
         await Promise.all([
-          // this.mailService.sendBottleneckAlertEmail(bottleneck),
+          this.mailService.sendBottleneckAlertEmail(bottleneck),
           this.bottlenecksRepository.update(bottleneck.id, {
             alertAt: new Date(),
           }),
